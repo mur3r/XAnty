@@ -1,0 +1,100 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+build/
+dist/
+*.spec
+
+# Локальные данные, профили и пользовательские секреты
+accounts.json
+folders.json
+accounts*.json
+folders*.json
+cookies.json
+*_cookies.json
+*cookies*.json
+portable_cookies.json
+*.xanty
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.log
+config/settings.json
+paths.json
+paths*.json
+preferences.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.har
+
+# Exports and backups can contain signed-in sessions and proxy credentials.
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+/exports/
+/backups/
+/screenshots/
+
+# Browser databases and session storage must stay local.
+Cookies
+Cookies-journal
+Login Data
+Login Data-journal
+Web Data
+Web Data-journal
+Local State
+Default/
+Profile [0-9]*/
+profile_*/
+Sessions/
+Session Storage/
+Local Storage/
+IndexedDB/
+Cache/
+Code Cache/
+GPUCache/
+
+# Большие исполняемые компоненты и временные результаты сборки
+/Bro/
+/Drivers/
+/output/
+/tmp/
+/xanty-current.png
+/*-source.zip
+
+# Локальные секреты и пути
+
+# Состояние, которое программа пишет в рабочую папку
+chat_cache.json
+chat_queue.json
+chat_state.json
+*.tmp
+monitoring_bot.db
+temp_messages.json
+temp_messages_stats.json
+logstest
+
+# Базовая папка с профилями Chrome, логами и данными аккаунтов
+SoftTwitter/
+browser_profiles/
+kook/
+logs/
+
+# Профиль Chrome для окна веб-интерфейса (chrome --app)
+webui_profile/
