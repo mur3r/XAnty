@@ -124,7 +124,10 @@ def run_desktop() -> None:
                     if health:
                         from xgenius import __version__
                         try:
-                            Path(health).write_text(json.dumps({'version': __version__, 'pid': os.getpid()}), encoding='utf-8')
+                            destination = Path(health)
+                            temporary = destination.with_suffix('.tmp')
+                            temporary.write_text(json.dumps({'version': __version__, 'pid': os.getpid()}), encoding='utf-8')
+                            os.replace(temporary, destination)
                         except OSError:
                             pass
 

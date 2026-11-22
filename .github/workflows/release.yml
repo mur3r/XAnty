@@ -17,6 +17,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 35
+    env:
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
     defaults:
       run:
         shell: pwsh
