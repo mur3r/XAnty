@@ -6,12 +6,14 @@
 
 **GitHub:** The user explicitly approved making mur3r/XAnty public. Verify tracked files are distributable, update repository configuration, push only reviewed source files, build and publish a release. Verify anonymous release metadata and asset download. GitHub connector is disconnected; use existing Git credentials without exposing them.
 
-- [ ] Add regression tests showing the window starts before a slow backend and errors remain visible.
-- [ ] Implement nonblocking startup, graceful startup cancellation and diagnostic timing.
-- [ ] Replace PNG with the supplied file; generate full ICO size set and bump version.
-- [ ] Configure mur3r/XAnty, update release documentation, run full checks and build.
-- [ ] Review source, publish authorized public repository/release, verify update API and installation on isolated test copies.
-- [ ] Deliver executable and report verified results and any remaining limitations.
+- [x] Add regression tests showing the window starts before a slow backend and errors remain visible.
+- [x] Implement nonblocking startup, graceful startup cancellation and diagnostic timing.
+- [x] Replace PNG with the supplied file; generate full ICO size set and bump version.
+- [x] Configure mur3r/XAnty, update release documentation, run full checks and build.
+- [x] Review source, publish authorized public repository/release, verify update API and installation on isolated test copies.
+- [x] Deliver executable and report verified results and any remaining limitations.
 
 - Live updater verification exposed inherited PyInstaller runtime state on restart. The helper now sets PYINSTALLER_RESET_ENVIRONMENT=1 before every restart, with a real PowerShell regression test.
 - The native window handle is private to DesktopApi so pywebview JS API discovery does not traverse native GUI/COM properties. Verified with the real JS bridge generator.
+
+- Final: 85 Python tests, Node behavior suite, native startup/error probes, GitHub CI build and real isolated installation/restart test passed. Public release: https://github.com/mur3r/XAnty/releases/tag/v2026.11.22.5
