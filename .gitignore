@@ -12,6 +12,13 @@ accounts.json
 folders.json
 accounts*.json
 folders*.json
+accounts*.txt
+accounts*.csv
+proxies*.txt
+proxies*.csv
+proxy*.txt
+tokens*.txt
+*cookies*.txt
 cookies.json
 *_cookies.json
 *cookies*.json
@@ -39,6 +46,12 @@ preferences.json
 *.p12
 *.pfx
 *.har
+.netrc
+_netrc
+.npmrc
+.pypirc
+.ssh/
+.aws/
 
 # Exports and backups can contain signed-in sessions and proxy credentials.
 *.zip
