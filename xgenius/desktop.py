@@ -3,6 +3,7 @@
 import asyncio
 import sys
 import threading
+import time
 from pathlib import Path
 
 
@@ -26,60 +27,104 @@ def run_desktop() -> None:
         raise RuntimeError("Install desktop dependencies: pip install -r requirements.txt") from exc
 
     from xgenius.config import application_home
-    from xgenius.web.server import WebApp
-
     icon = Path(__file__).resolve().parent / 'web' / 'static' / 'assets' / 'app.ico'
 
     if hasattr(webview, 'settings'):
         webview.settings['ALLOW_DOWNLOADS'] = True
 
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    ready = threading.Event()
+    closing = threading.Event()
     state = {}
+    started = time.monotonic()
+    root = application_home()
+    root.mkdir(parents=True, exist_ok=True)
+    log_path = root / 'startup.log'
+    try:
+        if log_path.exists() and log_path.stat().st_size > 128 * 1024:
+            log_path.write_text('', encoding='utf-8')
+    except OSError:
+        pass
+
+    def record(message):
+        try:
+            with log_path.open('a', encoding='utf-8') as stream:
+                stream.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} +{time.monotonic()-started:.2f}s {message}\n')
+        except OSError:
+            pass
+
+    def loading_page(error=''):
+        import base64
+        from html import escape
+        static = icon.parent.parent
+        template = (static / 'startup.html').read_text(encoding='utf-8')
+        logo = base64.b64encode((icon.parent / 'app-icon.png').read_bytes()).decode('ascii')
+        return (template.replace('{{LOGO}}', logo).replace('{{ERROR}}', escape(error))
+                .replace('{{MODE}}', 'error' if error else 'loading'))
+
+    bridge = DesktopApi()
 
     def run_server():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        app = WebApp(loop, desktop_mode=True)
+        app = None
         state["loop"] = loop
-        state["app"] = app
         try:
+            record('backend_import_started')
+            from xgenius.web.server import WebApp
+            if closing.is_set():
+                return
+            app = WebApp(loop, desktop_mode=True)
+            state['app'] = app
+            app.request_window_close = bridge.close
+
             def signal_ready(url):
                 state["url"] = url
-                ready.set()
+                record('backend_ready')
+                if closing.is_set():
+                    loop.create_task(app.shutdown())
+                else:
+                    bridge.window.load_url(url)
 
             loop.run_until_complete(app.run_forever(on_ready=signal_ready, host="127.0.0.1",
                                                      port=0, launch_browser=False))
         except BaseException as exc:
             state["error"] = exc
+            record(f'backend_error {type(exc).__name__}: {exc}')
+            if not closing.is_set():
+                try:
+                    error_page = loading_page(str(exc))
+                    # WebView2 may still be initializing and later reloads window.html.
+                    bridge.window.html = error_page
+                    bridge.window.load_html(error_page)
+                except Exception:
+                    pass
         finally:
-            if not app._stop.is_set():
+            if app is not None and not app._stop.is_set():
                 try:
                     loop.run_until_complete(app.shutdown())
                 except Exception:
                     pass
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             loop.close()
-            ready.set()
+            record('backend_stopped')
 
     worker = threading.Thread(target=run_server, name="xanty-local-server", daemon=True)
-    worker.start()
     try:
-        if not ready.wait(25):
-            raise RuntimeError("The local XAnty server did not start within 25 seconds.")
-        if "error" in state:
-            raise RuntimeError(f"The local XAnty server failed: {state['error']}") from state["error"]
-        if "url" not in state:
-            raise RuntimeError("The local XAnty server stopped before the window opened.")
-
-        storage = application_home() / "webview"
+        storage = root / "webview"
         storage.mkdir(parents=True, exist_ok=True)
-        bridge = DesktopApi()
-        bridge.window = webview.create_window("XAnty", state["url"], js_api=bridge,
-                                              width=1500, height=920, min_size=(950, 620))
-        state['app'].request_window_close = bridge.close
+        bridge.window = webview.create_window("XAnty", html=loading_page(), js_api=bridge,
+                                              width=1500, height=920, min_size=(950, 620),
+                                              background_color='#101014')
+        record('window_created')
         # Require the modern renderer; the deprecated MSHTML engine cannot render this UI.
-        webview.start(gui="edgechromium", private_mode=False, storage_path=str(storage), icon=str(icon))
+        # pywebview starts this callback in a worker; the native GUI loop never waits for the backend.
+        webview.start(worker.start, gui="edgechromium", private_mode=False, storage_path=str(storage), icon=str(icon))
     finally:
+        closing.set()
         loop = state.get("loop")
         app = state.get("app")
         if loop is not None and app is not None and worker.is_alive():
