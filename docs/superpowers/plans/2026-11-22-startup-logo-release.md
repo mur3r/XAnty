@@ -12,3 +12,6 @@
 - [ ] Configure mur3r/XAnty, update release documentation, run full checks and build.
 - [ ] Review source, publish authorized public repository/release, verify update API and installation on isolated test copies.
 - [ ] Deliver executable and report verified results and any remaining limitations.
+
+- Live updater verification exposed inherited PyInstaller runtime state on restart. The helper now sets PYINSTALLER_RESET_ENVIRONMENT=1 before every restart, with a real PowerShell regression test.
+- The native window handle is private to DesktopApi so pywebview JS API discovery does not traverse native GUI/COM properties. Verified with the real JS bridge generator.

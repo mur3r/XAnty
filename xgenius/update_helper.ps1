@@ -1,5 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$Manifest)
 $ErrorActionPreference = 'Stop'
+# A restarted onefile EXE must not reuse the departing process's extraction directory.
+$env:PYINSTALLER_RESET_ENVIRONMENT = '1'
 $plan = Get-Content -LiteralPath $Manifest -Raw -Encoding UTF8 | ConvertFrom-Json
 $target = [IO.Path]::GetFullPath([string]$plan.target)
 $source = [IO.Path]::GetFullPath([string]$plan.source)

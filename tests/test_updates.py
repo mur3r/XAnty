@@ -159,7 +159,7 @@ param($FilePath,$WorkingDirectory,$WindowStyle)
 if ($WindowStyle -ne 'Hidden') {{ throw 'Helper window was not hidden' }}
 $script:attempts++
 if ({fail} -and $script:attempts -eq 1) {{ throw 'Test restart failure' }}
-Add-Content -LiteralPath {quote(root/'restarted.txt')} -Value 'started'
+Add-Content -LiteralPath {quote(root/'restarted.txt')} -Value ('reset=' + $env:PYINSTALLER_RESET_ENVIRONMENT)
 }}
 & {quote(helper)} -Manifest {quote(manifest)}
 ''')
@@ -171,5 +171,7 @@ Add-Content -LiteralPath {quote(root/'restarted.txt')} -Value 'started'
                 if scenario!='checksum-failure':
                     self.assertEqual((root/'XAnty.exe.previous').read_bytes(), b'MZold')
                 self.assertTrue((root/'restarted.txt').exists(), 'Always restart the original app after a post-exit failure')
+                self.assertEqual((root/'restarted.txt').read_text().strip(), 'reset=1',
+                                 'Restart must unpack a fresh onefile runtime after the old process exits')
                 self.assertFalse((root/'XAnty.exe.next').exists())
                 self.assertFalse(source.exists())

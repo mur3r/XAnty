@@ -9,12 +9,12 @@ from pathlib import Path
 
 class DesktopApi:
     def __init__(self):
-        self.window = None
+        self._window = None
 
     def close(self):
         """Called by the Exit button in the native window."""
-        if self.window is not None:
-            self.window.destroy()
+        if self._window is not None:
+            self._window.destroy()
 
 
 def run_desktop() -> None:
@@ -83,7 +83,7 @@ def run_desktop() -> None:
                 if closing.is_set():
                     loop.create_task(app.shutdown())
                 else:
-                    bridge.window.load_url(url)
+                    bridge._window.load_url(url)
 
             loop.run_until_complete(app.run_forever(on_ready=signal_ready, host="127.0.0.1",
                                                      port=0, launch_browser=False))
@@ -94,8 +94,8 @@ def run_desktop() -> None:
                 try:
                     error_page = loading_page(str(exc))
                     # WebView2 may still be initializing and later reloads window.html.
-                    bridge.window.html = error_page
-                    bridge.window.load_html(error_page)
+                    bridge._window.html = error_page
+                    bridge._window.load_html(error_page)
                 except Exception:
                     pass
         finally:
@@ -116,7 +116,7 @@ def run_desktop() -> None:
     try:
         storage = root / "webview"
         storage.mkdir(parents=True, exist_ok=True)
-        bridge.window = webview.create_window("XAnty", html=loading_page(), js_api=bridge,
+        bridge._window = webview.create_window("XAnty", html=loading_page(), js_api=bridge,
                                               width=1500, height=920, min_size=(950, 620),
                                               background_color='#101014')
         record('window_created')

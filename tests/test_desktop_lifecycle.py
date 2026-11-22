@@ -17,6 +17,27 @@ spec.loader.exec_module(desktop)
 
 
 class DesktopLifecycleTests(unittest.TestCase):
+    def test_javascript_bridge_does_not_walk_native_window_properties(self):
+        from webview.util import inject_pywebview
+        from unittest.mock import Mock
+        accessed = threading.Event()
+        class NativeWindow:
+            @property
+            def native(self):
+                accessed.set()
+                return None
+        bridge = desktop.DesktopApi()
+        field = next(name for name in vars(bridge) if name.endswith('window'))
+        setattr(bridge, field, NativeWindow())
+        loaded = threading.Event()
+        window = types.SimpleNamespace(_js_api=bridge, _functions={}, _expose_lock=threading.Lock(),
+            events=types.SimpleNamespace(before_load=threading.Event(),loaded=loaded,_pywebviewready=threading.Event()),
+            run_js=Mock())
+        with patch('webview.util.load_js_files', return_value=('bridge', '%s')):
+            inject_pywebview('winforms', window)
+            self.assertTrue(loaded.wait(2))
+        self.assertFalse(accessed.is_set(), 'The JS bridge traversed native window properties during startup')
+
     def test_native_window_is_created_before_backend_initialization(self):
         with tempfile.TemporaryDirectory() as directory:
             state = {'gui_started': False}
