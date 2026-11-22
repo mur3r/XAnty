@@ -53,15 +53,28 @@ def check(executable, version, expected_sha256=None, timeout=180):
             print('Verified desktop startup' + (' and live automatic update' if expected_sha256 else '') + ': ' + version)
         finally:
             # Match the exact isolated executable; never stop other XAnty/browser processes.
-            owned = []
+            owned = {}
             for candidate in psutil.process_iter(['exe']):
                 try:
                     if candidate.info['exe'] and Path(candidate.info['exe']).resolve() == executable:
-                        candidate.terminate()
-                        owned.append(candidate)
+                        owned[candidate.pid] = candidate
+                        for child in candidate.children(recursive=True):
+                            owned[child.pid] = child
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
-            psutil.wait_procs(owned, timeout=15)
+            # WebView2 descendants can keep their isolated cache open after the host exits.
+            for candidate in reversed(list(owned.values())):
+                try:
+                    candidate.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            _, alive = psutil.wait_procs(list(owned.values()), timeout=15)
+            for candidate in alive:
+                try:
+                    candidate.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            psutil.wait_procs(alive, timeout=10)
             try:
                 process.wait(timeout=15)
             except subprocess.TimeoutExpired:
