@@ -15,6 +15,8 @@ from xgenius.cookies import save_cookies
 from xgenius.process_utils import hard_close_browser, kill_orphan_chrome
 from xgenius.settings import HEALTH_TIMEOUT_STRIKES, IDLE_HEALTH_INTERVAL
 from xgenius.browser_lifecycle import browser_process_alive
+from xgenius.profile_metadata import record_session_time
+from xgenius.browser_workspace import browser_lock, save_workspace
 
 
 class HealthMixin:
@@ -64,6 +66,7 @@ class HealthMixin:
         """Normal window closure is a closed profile, independent of X login state."""
         if state.browser is not browser:
             return False
+        record_session_time(self, username)
         state.browser = None
         state.is_active = False
         state.need_relogin = False
@@ -102,23 +105,20 @@ class HealthMixin:
         """
         for username, state in list(self.accounts.items()):
             browser = state.browser
+            record_session_time(self, username)
             state.browser = None
             state.is_active = False
             if browser is not None:
                 try:
                     try:
-                        save_cookies(browser, self.config, username)
+                        with browser_lock(browser):
+                            save_workspace(browser, self.config, username)
+                            save_cookies(browser, self.config, username)
                     except Exception as exc:
                         self.logger.warning(f"Could not save session: {type(exc).__name__}", username)
                     hard_close_browser(browser, timeout=10)
                 except Exception as e:
                     self.logger.error(f"Ошибка закрытия браузера: {e}", username)
-        try:
-            killed = kill_orphan_chrome(self.config.browser_profiles_dir)
-            if killed:
-                self.logger.info(f"Добиты осиротевшие процессы chrome: {killed}")
-        except Exception:
-            pass
 
     async def idle_health_watchdog(self):
         """Monitor open browser sessions without navigating away from user pages."""

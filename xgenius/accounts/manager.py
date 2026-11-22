@@ -25,16 +25,24 @@ from xgenius.browser import BrowserManager
 from xgenius.config import Config
 from xgenius.logger import Logger
 from xgenius.models import AccountState, BrowserConfig
+from xgenius.profile_metadata import ProfileMetadataMixin, replace_accounts, apply_session_times
+from xgenius.profile_leases import ProfileLease
 
 
-class AccountManager(HealthMixin, AuthMixin):
+class AccountManager(ProfileMetadataMixin, HealthMixin, AuthMixin):
 
     def __init__(self, config: Config, logger: Logger):
         self.config = config
         self.logger = logger
         self.accounts: Dict[str, AccountState] = {}
         self._data_lock = threading.RLock()
-        self.browser_manager = BrowserManager(config, BrowserConfig())
+        self.workspace_lease = ProfileLease.acquire_workspace(config)
+        try:
+            self.initialize_profile_metadata()
+            self.browser_manager = BrowserManager(config, BrowserConfig())
+        except BaseException:
+            self.workspace_lease.release()
+            raise
 
         # --- CACHE AND WORKER FOR GUI OPTIMIZATION ---
         self._cache_lock = threading.Lock()
@@ -74,28 +82,36 @@ class AccountManager(HealthMixin, AuthMixin):
             return self._load_accounts()
 
     def _load_accounts(self) -> List[dict]:
+        return self._read_document().get('accounts', [])
+
+    def _read_document(self) -> dict:
         try:
             if self.config.accounts_file.exists():
                 with open(self.config.accounts_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    return data.get("accounts", [])
-            return []
+                    return json.load(f)
+            return {'accounts': []}
         except Exception as e:
             self.logger.error(f"Failed to load accounts: {e}")
-            return []
+            raise
 
     def save_accounts(self, accounts: List[dict]) -> None:
         with self._data_lock:
             self._save_accounts(accounts)
 
     def _save_accounts(self, accounts: List[dict]) -> None:
+        self._write_document(replace_accounts(self._read_document(), accounts))
+
+    def _write_document(self, document: dict, checkpoint_at=None) -> None:
         temporary = None
+        pending = getattr(self, '_pending_session_times', {})
+        apply_session_times(document, pending, checkpoint_at)
         try:
             with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=self.config.base_dir,
                                              prefix='accounts_', suffix='.tmp', delete=False) as f:
                 temporary = f.name
-                json.dump({"accounts": accounts}, f, indent=4, ensure_ascii=False)
+                json.dump(document, f, indent=4, ensure_ascii=False)
             os.replace(temporary, self.config.accounts_file)
+            pending.clear()
         except Exception as e:
             self.logger.error(f"Failed to save accounts: {e}")
             raise

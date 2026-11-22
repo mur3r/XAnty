@@ -55,12 +55,16 @@ def hard_close_browser(browser, timeout: float = 15.0) -> None:
     """
     if browser is None:
         return
-    pid = getattr(browser, "_xg_pid", None)
-    if pid is None:
+    driver_process = getattr(browser,'_xg_driver_process',None)
+    if driver_process is None:
         try:
-            pid = browser.service.process.pid
-        except Exception:
-            pid = None
+            service_process = browser.service.process
+            if service_process.poll() is None:
+                driver_process = psutil.Process(service_process.pid)
+        except (AttributeError,psutil.Error):
+            pass
+    from xgenius.window_frames import detach_frame
+    detach_frame(browser)
 
     def _quit():
         try:
@@ -72,17 +76,18 @@ def hard_close_browser(browser, timeout: float = 15.0) -> None:
     t.start()
     t.join(timeout)
 
-    if pid and psutil.pid_exists(pid):
+    if driver_process is not None:
         try:
-            root = psutil.Process(pid)
-            children = root.children(recursive=True)
+            root = driver_process
+            children = root.children(recursive=True) if root.is_running() else []
             for c in children:
                 try:
                     c.kill()
                 except Exception:
                     pass
             try:
-                root.kill()
+                if root.is_running():
+                    root.kill()
             except Exception:
                 pass
         except Exception:
@@ -108,3 +113,6 @@ def hard_close_browser(browser, timeout: float = 15.0) -> None:
             extension.cleanup()
         except OSError:
             pass
+    lease = getattr(browser, '_xg_profile_lease', None)
+    if lease is not None:
+        lease.release()

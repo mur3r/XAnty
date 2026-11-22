@@ -115,9 +115,10 @@ class TransferApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_preferences_survive_a_new_app_and_reject_unsupported_values(self):
         response = await self.client.put('/api/preferences', json={'language': 'uk', 'theme': 'light'})
         self.assertEqual(response.status, 200)
-        self.assertEqual(await response.json(), {'language': 'uk', 'theme': 'light'})
+        result = await response.json()
+        self.assertEqual({k: result[k] for k in ('language', 'theme')}, {'language': 'uk', 'theme': 'light'})
         from xgenius.preferences import read_preferences
-        self.assertEqual(read_preferences(), {'language': 'uk', 'theme': 'light'})
+        self.assertEqual({k: read_preferences()[k] for k in ('language', 'theme')}, {'language': 'uk', 'theme': 'light'})
         response = await self.client.put('/api/preferences', json={'language': 'other'})
         self.assertEqual(response.status, 400)
         self.assertEqual(read_preferences()['language'], 'uk')

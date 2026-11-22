@@ -1,6 +1,7 @@
 """Launching Chrome uses its real identity and the selected profile settings."""
 import asyncio
 import importlib.util
+import json
 import sys
 import tempfile
 import types
@@ -53,6 +54,7 @@ class FakeChrome:
 
     def execute_cdp_cmd(self, command, arguments):
         self.cdp.append((command, arguments))
+        return {}
 
     def execute_async_script(self, script):
         return {'ok': True, 'changed': False, 'url': 'https://www.google.com/search?q=%s'}
@@ -80,7 +82,7 @@ class BrowserLaunchTests(unittest.TestCase):
         service_module.Service = lambda path: types.SimpleNamespace(process=types.SimpleNamespace(pid=123))
         selenium = types.ModuleType('selenium')
         selenium.webdriver = chrome_webdriver
-        proxy = types.SimpleNamespace(server='http://proxy.example:8080', username=None)
+        self.proxy = types.SimpleNamespace(server='http://proxy.example:8080', username=None, password=None)
         package = types.ModuleType('xgenius')
         package.__path__ = [str(ROOT)]
         modules = {'xgenius': package, 'selenium': selenium,
@@ -93,9 +95,9 @@ class BrowserLaunchTests(unittest.TestCase):
                    'xgenius.process_utils': types.SimpleNamespace(hard_close_browser=lambda b: self.closed.append(b)),
                    'xgenius.proxy_service': types.SimpleNamespace(
                        IP_CHECK_URL='https://check.example/ip', ProxyCheckError=ValueError,
-                       parse_proxy=lambda value: proxy, check_proxy=lambda value: '203.0.113.7',
+                       parse_proxy=lambda value: self.proxy, check_proxy=lambda value: '203.0.113.7',
                        parse_ip_response=lambda value: value),
-                   'xgenius.settings': types.SimpleNamespace(BLOCK_MEDIA_URLS=False)}
+                   'xgenius.settings': types.SimpleNamespace(BLOCK_MEDIA_URLS=True)}
         context = patch.dict(sys.modules, modules)
         context.start()
         self.addCleanup(context.stop)
@@ -109,7 +111,17 @@ class BrowserLaunchTests(unittest.TestCase):
     def _new_browser(self, options):
         browser = FakeChrome(options, self.version)
         self.created.append(browser)
+        self.addCleanup(lambda: getattr(browser, '_xg_profile_lease', None) and browser._xg_profile_lease.release())
+        self.addCleanup(lambda: getattr(browser, '_xg_proxy_extension', None) and browser._xg_proxy_extension.cleanup())
         return browser
+
+    def test_driver_start_failure_keeps_actionable_reason_and_redacts_secrets(self):
+        credentials=self.models.AccountCredentials('alice','private-account-password',proxy='proxy')
+        with patch.object(self.browser_module.webdriver,'Chrome',side_effect=RuntimeError(
+                'This version of ChromeDriver only supports Chrome version 128 private-account-password')):
+            with self.assertRaisesRegex(ValueError,'only supports Chrome version 128') as raised:
+                asyncio.run(self.manager.create_browser(credentials))
+        self.assertNotIn('private-account-password',str(raised.exception))
 
     def test_real_chrome_version_native_ua_and_profile_preferences(self):
         credentials = self.models.AccountCredentials('alice', '', proxy='proxy',
@@ -130,6 +142,50 @@ class BrowserLaunchTests(unittest.TestCase):
         with self.assertRaisesRegex(self.settings.ProfileSettingsError, 'does not match'):
             asyncio.run(self.manager.create_browser(self.models.AccountCredentials('one', '', proxy='proxy')))
         self.assertEqual(self.closed, self.created)
+
+    def test_policy_blocks_only_selected_resources_and_keeps_native_protection(self):
+        credentials = self.models.AccountCredentials('policy', '', proxy='proxy',
+            block_images=True, block_fonts=True, block_media=False, phishing_protection=False)
+        browser = asyncio.run(self.manager.create_browser(credentials))
+        arguments = browser.options.arguments
+        loaded = [value for value in arguments if value.startswith('--load-extension=')]
+        self.assertEqual(len(loaded), 1)
+        extension = Path(loaded[0].split('=', 1)[1])
+        rules = json.loads((extension / 'rules.json').read_text())
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0]['condition']['resourceTypes'], ['image', 'font'])
+        self.assertTrue(browser.options.experimental['prefs']['safebrowsing.enabled'])
+        for disabled in ('disable-client-side-phishing-detection', 'disable-background-networking', 'disable-component-update'):
+            self.assertNotIn('--' + disabled, arguments)
+            self.assertIn(disabled, browser.options.experimental['excludeSwitches'])
+        self.assertFalse(any(command == 'Network.setBlockedURLs' for command, _ in browser.cdp))
+
+    def test_policy_presets_and_proxy_authentication_load_together(self):
+        self.proxy.username, self.proxy.password = 'proxy-user', 'proxy-password'
+        preset = Path(self.temp.name) / 'preset-extension'
+        preset.mkdir()
+        with patch.object(self.browser_module.ExtensionSetStore, 'materialize', return_value=[preset]):
+            browser = asyncio.run(self.manager.create_browser(
+                self.models.AccountCredentials('combined', '', proxy='proxy')))
+        loaded = [value for value in browser.options.arguments if value.startswith('--load-extension=')]
+        self.assertEqual(len(loaded), 1)
+        paths = {Path(value) for value in loaded[0].split('=', 1)[1].split(',')}
+        self.assertEqual(paths, {preset, Path(browser._xg_proxy_extension.name),
+            Path(self.temp.name) / 'combined' / '.xgenius-policy'})
+        proxy_manifest = json.loads((Path(browser._xg_proxy_extension.name) / 'manifest.json').read_text())
+        self.assertIn('webRequestAuthProvider', proxy_manifest['permissions'])
+
+    def test_all_policy_controls_disabled_load_no_policy_extension(self):
+        browser = asyncio.run(self.manager.create_browser(self.models.AccountCredentials(
+            'disabled', '', proxy='proxy', phishing_protection=False)))
+        self.assertFalse(any(value.startswith('--load-extension=') for value in browser.options.arguments))
+        self.assertTrue(browser.options.experimental['prefs']['safebrowsing.enabled'])
+
+    def test_invalid_policy_is_rejected_before_starting_chrome(self):
+        credentials = self.models.AccountCredentials('invalid', '', proxy='proxy', block_media='false')
+        with self.assertRaisesRegex(self.settings.ProfileSettingsError, 'block_media'):
+            asyncio.run(self.manager.create_browser(credentials))
+        self.assertEqual(self.created, [])
 
 
 if __name__ == '__main__':

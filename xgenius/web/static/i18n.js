@@ -1,6 +1,111 @@
 'use strict';
 const I18N = (() => {
   const rows = `
+browser_tools_settings|Настройки браузеров|Browser preferences|Налаштування браузерів
+restore_tabs|Восстанавливать открытые вкладки|Restore open tabs|Відновлювати відкриті вкладки
+extension_set|Набор расширений|Extension set|Набір розширень
+extension_sets|Наборы расширений|Extension sets|Набори розширень
+extensions_none|Без набора|No set|Без набору
+extensions_portable|Сохранённый набор профиля|Saved profile set|Збережений набір профілю
+extensions_hint|Создайте набор из папок распакованных расширений Chrome Manifest V3. Выберите его при создании профиля. Файлы копируются в профиль и переносятся вместе с ним.|Create a set from unpacked Chrome Manifest V3 extension folders. Select it when creating a profile. Files are copied into the profile and travel with it.|Створіть набір із папок розпакованих розширень Chrome Manifest V3. Виберіть його під час створення профілю. Файли копіюються до профілю та переносяться разом із ним.
+extension_directories|Папки расширений|Extension folders|Папки розширень
+extension_directories_hint|Полный путь к каждой папке с manifest.json, по одному в строке. Скачивание из магазина не выполняется.|One full path per line to a folder containing manifest.json. No store downloads are performed.|Повний шлях до кожної папки з manifest.json, по одному в рядку. Завантаження з магазину не виконується.
+set_name|Название набора|Set name|Назва набору
+save_set|Сохранить набор|Save set|Зберегти набір
+no_extension_sets|Наборов пока нет|No extension sets yet|Наборів поки немає
+delete_set_question|Удалить набор из списка? Копии расширений в существующих профилях сохранятся.|Delete this set from the list? Existing profile copies will remain.|Видалити набір зі списку? Копії розширень у наявних профілях збережуться.
+frame_color|Цвет рамки окна|Window border color|Колір рамки вікна
+window_frames|Цветные рамки окон профилей|Colored profile window borders|Кольорові рамки вікон профілів
+frames_hint|Цвет задаётся в редакторе профиля. В Windows 10 рамка отображается у активного окна; в Windows 11 используется также системная рамка.|Set the color in the profile editor. Windows 10 outlines the active window; Windows 11 also uses the system border.|Колір задається в редакторі профілю. У Windows 10 рамка відображається для активного вікна; у Windows 11 використовується також системна рамка.
+session_autosave|Автоматически сохранять сессию|Save sessions automatically|Автоматично зберігати сесію
+autosave_seconds|Интервал сохранения, секунд|Save interval, seconds|Інтервал збереження, секунд
+autosave_hint|30–3600 секунд. Сохраняются cookies всех сайтов и адреса вкладок. Chrome сохраняет локальное хранилище самостоятельно. Несохранённые формы и состояние JavaScript не копируются.|30–3600 seconds. Saves cookies for all sites and tab URLs. Chrome maintains local storage itself. Unsaved forms and JavaScript state are not copied.|30–3600 секунд. Зберігаються cookies всіх сайтів та адреси вкладок. Chrome самостійно зберігає локальне сховище. Незбережені форми та стан JavaScript не копіюються.
+save_session|Сохранить сессию сейчас|Save session now|Зберегти сесію зараз
+session_saved|Сессия сохранена|Session saved|Сесію збережено
+cookies_all|Cookies: просмотр и вставка|Cookies: view and paste|Cookies: перегляд і вставка
+cookies_all_hint|Все сайты, включая HttpOnly cookies. Данные содержат сессии авторизации; храните их как пароли.|All sites, including HttpOnly cookies. This data includes signed-in sessions; treat it like passwords.|Усі сайти, включно з HttpOnly cookies. Дані містять сесії авторизації; зберігайте їх як паролі.
+cookies_live|Открытый браузер|Live browser|Відкритий браузер
+cookies_snapshot|Сохранённая сессия|Saved session|Збережена сесія
+existing_cookies|Имеющиеся cookies|Existing cookies|Наявні cookies
+paste_cookie_data|Вставить или загрузить cookies|Paste or load cookies|Вставити або завантажити cookies
+cookies_close_first|Закройте профиль перед загрузкой cookies.|Close the profile before loading cookies.|Закрийте профіль перед завантаженням cookies.
+cookies_merge_hint|JSON или Netscape. Новые cookies добавляются к существующим, совпадающие заменяются. Применяются при следующем запуске, даже без автовхода в X.|JSON or Netscape. New cookies are merged; matching cookies are replaced. Applied on next launch, including with X auto-login off.|JSON або Netscape. Нові cookies додаються до наявних, однакові замінюються. Застосовуються під час наступного запуску навіть без автовходу в X.
+cookies_imported_all|Загружено cookies: {n}. Применятся при следующем запуске.|Loaded {n} cookies. Applied on next launch.|Завантажено cookies: {n}. Застосуються під час наступного запуску.
+cookie_file_limit|Файл cookies должен быть не больше 16 МБ.|Cookie file must be 16 MB or smaller.|Файл cookies має бути не більшим за 16 МБ.
+open_profile_folder|Открыть папку профиля|Open profile folder|Відкрити папку профілю
+clear_cache|Очистить только кэш|Clear cache only|Очистити лише кеш
+clear_cache_question|Очистить кэш закрытого профиля? Cookies, авторизация, вкладки, расширения и локальное хранилище сохранятся.|Clear this closed profile's cache? Cookies, sign-in, tabs, extensions and local storage will remain.|Очистити кеш закритого профілю? Cookies, авторизація, вкладки, розширення та локальне сховище збережуться.
+cache_cleared|Кэш очищен: {n} файлов, {mb} МБ.|Cache cleared: {n} files, {mb} MB.|Кеш очищено: {n} файлів, {mb} МБ.
+network_diagnostics|Проверка WebRTC / DNS|WebRTC / DNS check|Перевірка WebRTC / DNS
+diagnostics_hint|Проверка выполняется в выбранном браузере через ipify, Google STUN и dnsleak.dev. Сервисы видят тестовые сетевые запросы. Пользовательские вкладки сохраняются.|Runs in the selected browser using ipify, Google STUN and dnsleak.dev. These services receive the test network requests. Your tabs are preserved.|Перевірка виконується у вибраному браузері через ipify, Google STUN та dnsleak.dev. Сервіси отримують тестові мережеві запити. Вкладки користувача зберігаються.
+diagnostics_running|Проверяем сеть профиля…|Checking the profile network…|Перевіряємо мережу профілю…
+diagnostics_unavailable|Не удалось завершить проверку. Результат не подтверждён.|Could not complete the check. Result is unverified.|Не вдалося завершити перевірку. Результат не підтверджено.
+browser_ip|Внешний IP браузера|Browser public IP|Зовнішній IP браузера
+browser_ip_changed|IP отличается от адреса при запуске. Проверьте маршрут и ротацию прокси.|IP differs from launch-time IP. Check routing and proxy rotation.|IP відрізняється від адреси під час запуску. Перевірте маршрут і ротацію проксі.
+diagnostic_matched|Совпадает с IP браузера|Matches browser IP|Збігається з IP браузера
+diagnostic_warning|Нужна проверка|Needs review|Потрібна перевірка
+diagnostic_observed|Резолверы измерены|Resolvers observed|Резолвери виміряно
+diagnostic_inconclusive|Не подтверждено|Inconclusive|Не підтверджено
+rtc_mismatch|Другие публичные IP в WebRTC|Other public WebRTC IPs|Інші публічні IP у WebRTC
+rtc_hint|Отличающийся публичный IP может указывать на обход прокси. Отсутствие кандидатов не доказывает отсутствие утечек.|A different public IP may indicate proxy bypass. No candidates does not prove that there are no leaks.|Інша публічна IP-адреса може свідчити про обхід проксі. Відсутність кандидатів не доводить відсутності витоків.
+dns_lookups|Получено DNS-запросов: {n} из {total}|DNS lookups observed: {n} of {total}|Отримано DNS-запитів: {n} із {total}
+dns_hint|Сравните операторов с ожидаемыми DNS прокси/VPN. Другая страна или публичный DNS сами по себе не доказывают утечку; неполный тест не считается успешным.|Compare operators with your expected proxy/VPN DNS. Another country or a public resolver alone does not prove a leak; incomplete tests are not passes.|Порівняйте операторів з очікуваними DNS проксі/VPN. Інша країна або публічний DNS самі по собі не доводять витоку; неповний тест не вважається успішним.
+package_integrity_hint|Новые пакеты проверяются по SHA-256 перед импортом. Старые пакеты без контрольных сумм показывают предупреждение.|New packages are verified with SHA-256 before import. Legacy packages without checksums show a warning.|Нові пакети перевіряються за SHA-256 перед імпортом. Старі пакети без контрольних сум показують попередження.
+integrity_verified|Целостность: SHA-256 проверен|Integrity: SHA-256 verified|Цілісність: SHA-256 перевірено
+integrity_unavailable|Контрольных сумм нет — целостность не подтверждена|No checksums — integrity unverified|Контрольних сум немає — цілісність не підтверджена
+profile_already_open|Профиль уже открыт в другом сеансе. Закройте его перед продолжением.|Profile is already open in another session. Close it before continuing.|Профіль уже відкритий в іншому сеансі. Закрийте його перед продовженням.
+profile_number|Номер|Number|Номер
+yes|Да|Yes|Так
+no|Нет|No|Ні
+favorites|Избранное|Favorites|Обране
+profile_status|Статус профиля|Profile status|Статус профілю
+browser_state|Браузер|Browser|Браузер
+all_profile_statuses|Все статусы профиля|All profile statuses|Усі статуси профілю
+work_active|Активен|Active|Активний
+work_new|Новый|New|Новий
+work_review|На проверке|Under review|На перевірці
+work_unused|Не используется|Not used|Не використовується
+favorite|В избранное|Add to favorites|До обраного
+unfavorite|Убрать из избранного|Remove from favorites|Прибрати з обраного
+runtime|Время работы|Runtime|Час роботи
+hours_short|ч|h|год
+columns|Колонки|Columns|Колонки
+columns_hint|Выберите поля и расположите их стрелками. Название профиля остаётся видимым.|Choose fields and reorder them using the arrows. Profile name stays visible.|Виберіть поля та змініть порядок стрілками. Назва профілю залишається видимою.
+reset_columns|Сбросить колонки|Reset columns|Скинути колонки
+move_up|Выше|Move up|Вище
+move_down|Ниже|Move down|Нижче
+quick_rename|Переименовать: двойной клик или F2|Rename: double click or F2|Перейменувати: подвійний клік або F2
+tags|Теги|Tags|Теги
+tags_hint|Теги через запятую|Comma-separated tags|Теги через кому
+change_tags|Изменить теги|Change tags|Змінити теги
+trash|Корзина|Trash|Кошик
+move_to_trash|В корзину|Move to trash|До кошика
+trash_question|Переместить профили ({n}) в корзину? Настройки и файлы сохранятся до окончательного удаления. Браузеры должны быть закрыты.|Move {n} profiles to trash? Settings and files remain until permanent deletion. Close their browsers first.|Перемістити профілі ({n}) до кошика? Налаштування й файли зберігатимуться до остаточного видалення. Браузери мають бути закриті.
+trashed|Профили перемещены в корзину|Profiles moved to trash|Профілі переміщено до кошика
+trash_hint|Восстановите профиль или измените срок хранения. Срок считается со дня перемещения в корзину. Автоочистка работает при запущенном XAnty и при следующем запуске.|Restore a profile or change retention. Retention starts when it is trashed. Automatic cleanup runs while XAnty is open and at the next startup.|Відновіть профіль або змініть термін зберігання. Термін рахується від дня переміщення до кошика. Автоочищення працює у відкритому XAnty та під час наступного запуску.
+trash_empty|Корзина пуста|Trash is empty|Кошик порожній
+retention_days|Хранить, дней|Retention, days|Зберігати, днів
+retention_hint|0 — хранить бессрочно; от 1 до 3650 — удалить автоматически через указанное число дней.|0 keeps profiles forever; 1 to 3650 deletes them automatically after that many days.|0 — зберігати безстроково; від 1 до 3650 — видалити автоматично через указану кількість днів.
+deleted_at|Удалён|Trashed at|Видалено
+delete_after|Удалить окончательно|Delete permanently after|Видалити остаточно
+never_delete|Бессрочно|Keep forever|Безстроково
+restore|Восстановить|Restore|Відновити
+delete_forever|Удалить навсегда|Delete forever|Видалити назавжди
+purge_question|Удалить профиль, cookies и файлы Chrome навсегда? Восстановление станет невозможным.|Permanently delete the profile, cookies and Chrome files? This cannot be undone.|Видалити профіль, cookies та файли Chrome назавжди? Відновлення стане неможливим.
+change_history|История изменений|Change history|Історія змін
+history_hint|Записываются изменения с момента обновления. Автор — пользователь Windows; пароли и токены скрыты.|Changes are recorded from this update onward. Author is the Windows user; passwords and tokens are hidden.|Зміни записуються з моменту оновлення. Автор — користувач Windows; паролі й токени приховані.
+search_history|Поиск в истории|Search history|Пошук в історії
+history_empty|Изменений пока нет|No changes yet|Змін поки немає
+audit_created|Создан|Created|Створено
+audit_updated|Настройки изменены|Settings changed|Налаштування змінено
+audit_trashed|В корзине|Moved to trash|У кошику
+audit_restored|Восстановлен|Restored|Відновлено
+audit_retention_changed|Изменён срок хранения|Retention changed|Змінено термін зберігання
+audit_purged|Удалён навсегда|Deleted forever|Видалено назавжди
+password|Пароль|Password|Пароль
+headless|Без окна|Headless|Без вікна
+close_before_trash|Закройте выбранные профили и дождитесь завершения операций перед удалением в корзину.|Close selected profiles and wait for operations to finish before moving them to trash.|Закрийте вибрані профілі та дочекайтеся завершення операцій перед переміщенням до кошика.
+reserved_in_trash|Профиль с этим именем находится в корзине. Сначала восстановите или удалите его окончательно.|A profile with this name is in trash. Restore it or delete it permanently first.|Профіль із цим ім’ям у кошику. Спочатку відновіть або видаліть його остаточно.
 select_filtered|Выбрать найденные|Select matching profiles|Вибрати знайдені
 select_page|Выбрать страницу|Select this page|Вибрати сторінку
 selection_hidden|Вне фильтра: {n}|Outside filters: {n}|Поза фільтром: {n}
@@ -64,7 +169,7 @@ rename_folder|Переименовать папку|Rename folder|Перейме
 delete_folder|Удалить папку|Delete folder|Видалити папку
 folder_name|Название папки|Folder name|Назва папки
 folder|Папка|Folder|Папка
-search|Имя, папка, IP или регион…|Name, folder, IP or region…|Ім’я, папка, IP або регіон…
+search|Имя, №, заметки, теги, прокси…|Name, #, notes, tags, proxy…|Ім’я, №, нотатки, теги, проксі…
 new_profile|Создать профиль|Create profile|Створити профіль
 from_dolphin|Из Dolphin|From Dolphin|З Dolphin
 transfer|Передать профили|Transfer profiles|Передати профілі
@@ -291,7 +396,7 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
     localize();
     document.dispatchEvent(new CustomEvent('languagechange'));
   }
-  const errors = {'Another transfer operation is running': 'transfer_busy', 'Profile transfer is running; wait for it to finish': 'transfer_busy', 'Close the selected profiles before exporting': 'close_before_export', 'Enter a Dolphin API token': 'token_required', 'Invalid or expired Dolphin API token': 'invalid_token', 'Cannot connect to the Dolphin API': 'api_unavailable', 'No profiles to export': 'no_profiles_export', 'No saved cookies for this profile': 'cookies_missing', 'Close this profile before importing cookies': 'close_before_cookies', 'Operation cancelled': 'cancelled'};
+  const errors = {'Profile is already open in another session. Close it before continuing.':'profile_already_open','Закройте выбранные профили и дождитесь завершения операций перед удалением в корзину.':'close_before_trash','Профиль с этим именем находится в корзине. Сначала восстановите или удалите его окончательно.':'reserved_in_trash','Another transfer operation is running': 'transfer_busy', 'Profile transfer is running; wait for it to finish': 'transfer_busy', 'Close the selected profiles before exporting': 'close_before_export', 'Enter a Dolphin API token': 'token_required', 'Invalid or expired Dolphin API token': 'invalid_token', 'Cannot connect to the Dolphin API': 'api_unavailable', 'No profiles to export': 'no_profiles_export', 'No saved cookies for this profile': 'cookies_missing', 'Close this profile before importing cookies': 'close_before_cookies', 'Operation cancelled': 'cancelled'};
   Object.assign(errors, {
     'Dolphin requires a paid plan for this operation':'paid_plan',
     'Proxy location is unavailable. The proxy IP check succeeded.':'proxy_geo_failed',
@@ -320,6 +425,9 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
     'Source OS differs from the Windows Chrome used by XAnty':'source_os',
     'An internal username was generated; the original Dolphin profile name is preserved':'internal_username',
     'Already imported':'already_imported', 'This Dolphin profile is already imported':'already_imported',
+    'The selected Chrome / ChromeDriver pair is missing. Install a compatible pair in Chromium versions.':'ops_missing_pair',
+    'The selected Chromium pair is unavailable or invalid; using the bundled browser.':'ops_cft_fallback',
+    'The saved Chromium selection is invalid; using the bundled browser.':'ops_cft_fallback',
     'Could not read the local browser cookie database':'read_session_failed', 'Could not read the saved portable session':'read_session_failed',
     'Could not read the XAnty profile package':'invalid_package', 'This is not a valid XAnty profile package':'invalid_package',
     'Unsafe path in profile package':'unsafe_package', 'Unexpected file in profile package':'unsafe_package',
@@ -349,3 +457,118 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   return {t, set, localize, error, get language() { return language; }, messages};
 })();
 const t = I18N.t;
+
+// Workspace operations keep the same RU / EN / UK message format as the app.
+{
+ const rows=`
+workspace_operations|Инструменты|Tools|Інструменти
+profile_size|Размер профиля|Profile size|Розмір профілю
+reminder|Напоминание|Reminder|Нагадування
+ops_intro|Браузеры, место на диске, копии и наборы окон — в одной рабочей области.|Browsers, disk space, backups and window sets for this workspace.|Браузери, місце на диску, копії та набори вікон цієї робочої області.
+ops_loading|Загрузка инструментов…|Loading tools…|Завантаження інструментів…
+ops_storage|Место на диске|Disk space|Місце на диску
+ops_profiles_size|Размер измеренных профилей|Measured profile storage|Розмір виміряних профілів
+ops_sizes_known|Профилей измерено|Profiles measured|Профілів виміряно
+ops_scan_sizes|Измерить профили|Measure profiles|Виміряти профілі
+ops_sizes_updated|Размеры профилей обновлены.|Profile sizes updated.|Розміри профілів оновлено.
+ops_cache_selected|Кэш выбранных ({n})|Selected cache ({n})|Кеш вибраних ({n})
+ops_cache_hint|Очистка кэша доступна для закрытых профилей. Cookies и сессии сохраняются.|Close selected profiles before clearing cache. Cookies and sessions are kept.|Закрийте вибрані профілі перед очищенням кешу. Cookies і сесії зберігаються.
+ops_cache_question|Очистить только кэш выбранных профилей ({n})?|Clear only the cache of {n} selected profiles?|Очистити лише кеш вибраних профілів ({n})?
+ops_preview_obsolete|Найти устаревшие файлы|Find obsolete files|Знайти застарілі файли
+ops_obsolete_found|Найдено: {n} файлов, {size}. Проверьте список перед очисткой.|Found {n} files, {size}. Review the list before cleaning.|Знайдено: {n} файлів, {size}. Перевірте список перед очищенням.
+ops_clean_obsolete|Удалить найденные файлы|Clean listed files|Видалити знайдені файли
+ops_cleanup_question|Удалить найденные устаревшие файлы ({n})?|Remove the {n} listed obsolete files?|Видалити знайдені застарілі файли ({n})?
+ops_reclaimed|Удалено файлов: {n}. Освобождено: {size}.|Removed {n} files. Reclaimed {size}.|Видалено файлів: {n}. Звільнено: {size}.
+ops_chromium|Версии Chromium|Chromium versions|Версії Chromium
+ops_cft_hint|Chrome for Testing устанавливается вместе с ChromeDriver той же версии. Профили используют отдельные папки данных.|Chrome for Testing is installed with the same ChromeDriver version. Each profile keeps its own data folder.|Chrome for Testing встановлюється разом із ChromeDriver тієї самої версії. Профілі мають окремі папки даних.
+ops_cft_fallback|Выбранная пара недоступна или повреждена. Используется встроенный браузер. Проверьте версию:|The selected pair is missing or invalid. Using the bundled browser. Check version:|Вибрана пара недоступна або пошкоджена. Використовується вбудований браузер. Перевірте версію:
+ops_bundled|Встроенная версия (Bro / Drivers)|Bundled version (Bro / Drivers)|Вбудована версія (Bro / Drivers)
+ops_selected|Используется|Selected|Використовується
+ops_installed|Установлена|Installed|Встановлена
+ops_unavailable|Недоступна|Unavailable|Недоступна
+ops_select|Использовать|Select|Використовувати
+ops_cft_close|Перед сменой или удалением версии закройте все профили.|Close all profiles before selecting or deleting a version.|Перед зміною або видаленням версії закрийте всі профілі.
+ops_cft_version|Канал или полная версия|Channel or full version|Канал або повна версія
+ops_check_versions|Проверить версии|Check versions|Перевірити версії
+ops_install_pair|Установить пару|Install pair|Встановити пару
+ops_cft_verification|Только официальные серверы Google через HTTPS. Проверяются целостность ZIP и совпадение версий. Google не публикует подписанные хэши в этом каталоге.|Official Google HTTPS servers only. ZIP integrity and executable versions are checked. This catalog does not provide signed vendor hashes.|Лише офіційні сервери Google через HTTPS. Перевіряються цілісність ZIP і збіг версій. Google не публікує підписані хеші в цьому каталозі.
+ops_delete_version|Удалить установленную пару {version}?|Delete the installed {version} pair?|Видалити встановлену пару {version}?
+ops_cft_job|Установка Chromium|Chromium installation|Встановлення Chromium
+ops_backups|Локальные резервные копии|Local backups|Локальні резервні копії
+ops_backup_job|Резервная копия|Workspace backup|Резервна копія
+ops_backup_hint|Копии включают данные профилей и сессий. Автоматическое копирование работает, пока XAnty запущен; при открытых профилях оно откладывается.|Backups include profile and session data. Automatic backups run while XAnty is open and wait for profiles to close.|Копії містять дані профілів і сесій. Автоматичне копіювання працює, поки XAnty запущено; за відкритих профілів воно відкладається.
+ops_backup_auto|Автоматические копии|Automatic backups|Автоматичні копії
+ops_backup_directory|Папка на локальном диске|Local backup folder|Папка на локальному диску
+ops_backup_directory_hint|Укажите полный путь. Копии этого рабочего пространства хранятся в отдельной подпапке.|Enter a full local path. This workspace uses a dedicated subfolder.|Укажіть повний локальний шлях. Копії цієї робочої області зберігаються в окремій підпапці.
+ops_backup_interval|Интервал, часов|Interval, hours|Інтервал, годин
+ops_backup_keep|Хранить последних копий|Keep latest copies|Зберігати останніх копій
+ops_backup_run|Сохранить и создать копию|Save and back up now|Зберегти й створити копію
+ops_backup_last|Последняя успешная копия|Last successful backup|Остання успішна копія
+ops_backup_next|Следующая копия|Next backup|Наступна копія
+ops_choose_directory|Укажите папку резервных копий.|Choose a backup folder.|Укажіть папку резервних копій.
+ops_backup_status_never|Копий пока нет|No backup yet|Копій поки немає
+ops_backup_status_running|Создание копии…|Backing up…|Створення копії…
+ops_backup_status_completed|Копия сохранена и проверена|Backup saved and verified|Копію збережено й перевірено
+ops_backup_status_failed|Не удалось создать копию|Backup failed|Не вдалося створити копію
+ops_backup_status_postponed|Ожидает закрытия профилей|Waiting for profiles to close|Очікує закриття профілів
+ops_backup_status_cancelled|Копирование отменено|Backup cancelled|Копіювання скасовано
+ops_window_sets|Наборы окон|Window sets|Набори вікон
+ops_window_sets_hint|Сохраните состав открытых или выбранных профилей. Открытие набора закроет окна профилей, которых в нём нет.|Save open or selected profiles as a set. Opening a set closes profile windows outside that set.|Збережіть відкриті або вибрані профілі як набір. Відкриття набору закриває вікна профілів поза ним.
+ops_save_open_set|Сохранить открытые|Save open profiles|Зберегти відкриті
+ops_save_selected_set|Сохранить выбранные|Save selected profiles|Зберегти вибрані
+ops_set_count|Профилей: {n}|Profiles: {n}|Профілів: {n}
+ops_set_missing|Недоступных профилей: {n}. Измените состав набора.|Missing profiles: {n}. Edit the set first.|Недоступних профілів: {n}. Змініть склад набору.
+ops_choose_set_profiles|Выберите профили, которые должны входить в набор.|Choose the profiles to include in this set.|Виберіть профілі для цього набору.
+ops_no_window_sets|Наборов пока нет.|No window sets yet.|Наборів поки немає.
+ops_set_not_found|Набор не найден. Обновите список.|Set not found. Refresh the list.|Набір не знайдено. Оновіть список.
+ops_open_exact|Открыть набор|Open exact set|Відкрити набір
+ops_exact_question|Окна вне набора ({n}) будут закрыты с сохранением сессий. Открыть этот набор?|Close {n} profile windows outside this set, saving sessions, then open this exact set?|Вікна поза набором ({n}) буде закрито зі збереженням сесій. Відкрити цей набір?
+ops_delete_set|Удалить набор из списка?|Delete this window set?|Видалити цей набір зі списку?
+ops_reminders|Напоминания|Reminders|Нагадування
+ops_add_reminder|Добавить|Add reminder|Додати
+ops_reminder_note|Текст напоминания|Reminder note|Текст нагадування
+ops_local_time|Местное время компьютера. Напоминания показываются, пока XAnty запущен.|Computer local time. Reminders appear while XAnty is open.|Місцевий час комп’ютера. Нагадування відображаються, поки XAnty запущено.
+ops_due|Пора выполнить|Due now|Час виконати
+ops_no_reminders|Напоминаний пока нет. Их можно задать и в редакторе профиля.|No reminders. You can also add one in the profile editor.|Нагадувань поки немає. Їх також можна додати в редакторі профілю.
+ops_open_reminders|К напоминаниям|Open reminders|До нагадувань
+ops_invalid_date|Укажите корректную дату и время.|Enter a valid date and time.|Укажіть правильні дату й час.
+ops_important|Важный профиль|Important profile|Важливий профіль
+ops_protected_hint|Важные и избранные профили защищены: для удаления нужно ввести DELETE.|Important and favorite profiles require typing DELETE before deletion.|Важливі та обрані профілі захищено: для видалення потрібно ввести DELETE.
+ops_type_delete|Введите DELETE для подтверждения|Type DELETE to confirm|Уведіть DELETE для підтвердження
+ops_block_images|Не загружать изображения|Block images|Не завантажувати зображення
+ops_block_media|Не загружать аудио и видео|Block audio and video|Не завантажувати аудіо й відео
+ops_block_fonts|Не загружать веб-шрифты|Block web fonts|Не завантажувати вебшрифти
+ops_phishing_protection|Предупреждать о подозрительных адресах|Warn about suspicious addresses|Попереджати про підозрілі адреси
+ops_phishing_hint|Защита Safe Browsing Chrome остаётся включённой. Дополнительная проверка использует ограниченные правила для адресов.|Chrome Safe Browsing remains enabled. Additional address checks use a limited set of URL heuristics.|Захист Safe Browsing Chrome залишається ввімкненим. Додаткова перевірка використовує обмежені правила для адрес.
+ops_export_choice|Выберите состав переносимого профиля.|Choose what to include in the profile package.|Виберіть склад переносного профілю.
+ops_safe_export|Без секретов (только настройки)|Without secrets (settings only)|Без секретів (лише налаштування)
+ops_safe_export_hint|Пароли, токены, cookies, учётные данные прокси и файлы браузера исключаются. Для полного переноса сессий снимите флажок.|Excludes passwords, tokens, cookies, proxy credentials and browser files. Uncheck to transfer complete sessions.|Паролі, токени, cookies, облікові дані проксі й файли браузера виключаються. Зніміть прапорець для повного перенесення сесій.
+ops_missing_pair|Выбранная пара Chrome / ChromeDriver не найдена. Установите совместную пару в разделе версий Chromium.|The selected Chrome / ChromeDriver pair is missing. Install a compatible pair in Chromium versions.|Вибрану пару Chrome / ChromeDriver не знайдено. Установіть спільну пару в розділі версій Chromium.
+ops_no_errors|Проблем запуска не обнаружено.|No launch problems found.|Проблем запуску не виявлено.
+ops_error_missing_browser|Не найден браузер|Browser missing|Браузер не знайдено
+ops_fix_missing_browser|Проверьте выбранную пару Chrome и ChromeDriver или установите её в разделе версий.|Check the selected Chrome and ChromeDriver pair or install one in Chromium versions.|Перевірте вибрану пару Chrome і ChromeDriver або встановіть її в розділі версій.
+ops_error_proxy|Ошибка прокси|Proxy problem|Помилка проксі
+ops_fix_proxy|Проверьте адрес, порт, логин и пароль прокси в профиле, затем повторите проверку прокси.|Check the profile proxy host, port and credentials, then run the proxy check.|Перевірте адресу, порт, логін і пароль проксі в профілі, потім повторіть перевірку проксі.
+ops_error_profile_busy|Профиль занят|Profile in use|Профіль зайнятий
+ops_fix_profile_busy|Закройте окно этого профиля в другом экземпляре XAnty и повторите запуск.|Close this profile in the other XAnty instance, then try again.|Закрийте цей профіль в іншому екземплярі XAnty й повторіть запуск.
+ops_error_version|Несовместимые версии|Version mismatch|Несумісні версії
+ops_fix_version|Выберите совместную установку Chrome и ChromeDriver одной версии.|Select Chrome and ChromeDriver installed as an exact-version pair.|Виберіть спільну інсталяцію Chrome і ChromeDriver однієї версії.
+ops_error_timeout|Время ожидания истекло|Launch timeout|Час очікування минув
+ops_fix_timeout|Проверьте доступность прокси и сеть. Закройте профиль и повторите запуск.|Check the proxy and network. Close the profile and retry.|Перевірте доступність проксі й мережу. Закрийте профіль і повторіть запуск.
+ops_error_configuration|Настройки профиля|Profile settings|Налаштування профілю
+ops_fix_configuration|Откройте редактор и проверьте параметры браузера и прокси.|Open the profile editor and check browser and proxy settings.|Відкрийте редактор і перевірте параметри браузера та проксі.
+ops_error_unknown|Ошибка запуска|Launch problem|Помилка запуску
+ops_fix_unknown|Проверьте описание ошибки и параметры профиля. Подробности доступны в журнале.|Review the error and profile settings. More details are available in the monitor.|Перевірте опис помилки й параметри профілю. Подробиці доступні в журналі.
+ops_job_done|{name}: завершено.|{name}: completed.|{name}: завершено.
+ops_job_cancelled|{name}: отменено.|{name}: cancelled.|{name}: скасовано.
+ops_phase_starting|Подготовка|Preparing|Підготовка
+ops_phase_resolve|Проверка версии|Resolving version|Перевірка версії
+ops_phase_download|Загрузка|Downloading|Завантаження
+ops_phase_extract|Распаковка и проверка|Extracting and checking|Розпакування й перевірка
+ops_phase_complete|Готово|Complete|Готово
+ops_phase_finished|Завершено|Finished|Завершено
+ops_phase_exporting|Сохранение профилей|Saving profiles|Збереження профілів
+ops_phase_verifying|Проверка копии|Verifying backup|Перевірка копії
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}

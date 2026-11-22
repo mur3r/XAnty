@@ -28,6 +28,21 @@ class ProfileSettingsTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(settings.ProfileSettingsError):
                 settings.browser_settings(bad)
 
+    def test_workspace_includes_strict_policy_flags(self):
+        defaults = settings.workspace_settings({})
+        self.assertEqual({key: defaults[key] for key in
+            ('block_images', 'block_media', 'block_fonts', 'phishing_protection')}, {
+                'block_images': False, 'block_media': False,
+                'block_fonts': False, 'phishing_protection': True})
+        custom = settings.workspace_settings({'block_images': True, 'block_media': True,
+            'block_fonts': True, 'phishing_protection': False})
+        self.assertTrue(custom['block_fonts'])
+        self.assertFalse(custom['phishing_protection'])
+        for key in ('block_images', 'block_media', 'block_fonts', 'phishing_protection'):
+            for value in (None, 0, 1, 'false'):
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(settings.ProfileSettingsError, key):
+                    settings.workspace_settings({key: value})
+
 
 if __name__ == '__main__':
     unittest.main()

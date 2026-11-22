@@ -19,7 +19,7 @@ def build() -> Path:
         js = (STATIC / name).read_text(encoding="utf-8")
         return f"<script>\n/* ---- {name} ---- */\n{js}\n</script>"
 
-    html = re.sub(r'<script src="([a-z]+\.js)"></script>', inline_script, html)
+    html = re.sub(r'<script src="([a-z-]+\.js)"></script>', inline_script, html)
     html = html.replace("<title>XAnty</title>", "<title>XAnty (preview)</title>")
     out = STATIC / "preview.html"
     out.write_text(html, encoding="utf-8")

@@ -44,6 +44,10 @@ class Job:
                                                 ('exported', 'exported'), ('skipped', 'skipped'), ('errors', 'error'))})
             result['warnings'] = sum(bool(row.get('warnings')) for row in self.report)
             result['download_ready'] = self.status == 'completed' and self.file_path is not None
+            if isinstance(self.result,dict):
+                for key in ('integrity','integrity_algorithm','verified_files'):
+                    if key in self.result:
+                        result[key]=self.result[key]
             if details:
                 result['report'] = copy.deepcopy(self.report)
             return result
@@ -87,4 +91,4 @@ class JobManager:
                 job.cancel_event.set()
                 pending.append(job.task)
         if pending:
-            await asyncio.wait(pending, timeout=23)
+            await asyncio.gather(*[asyncio.shield(task) for task in pending], return_exceptions=True)

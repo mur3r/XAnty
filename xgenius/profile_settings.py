@@ -1,6 +1,9 @@
 """Validated, stable browser preferences for an individual Chrome profile."""
 
 import re
+import hashlib
+
+from xgenius.browser_policy import BrowserPolicyError, policy_settings
 
 
 class ProfileSettingsError(ValueError):
@@ -9,6 +12,24 @@ class ProfileSettingsError(ValueError):
 
 _LANGUAGE = re.compile(r'^[a-z]{2,3}(?:-[A-Z]{2})?$')
 _TIMEZONE = re.compile(r'^(?:UTC|[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+)+)$')
+
+
+def workspace_settings(data):
+    try:
+        policy = policy_settings(data)
+    except BrowserPolicyError as exc:
+        raise ProfileSettingsError(str(exc)) from exc
+    restore = data.get('restore_tabs', True)
+    extension = data.get('extension_set', '') or ''
+    palette = ('#a46bff','#43b6db','#e5a33f','#56bd86','#e16f9a','#6c8eed')
+    color = data.get('frame_color') or palette[int(hashlib.sha256(str(data.get('username','')).encode()).hexdigest()[:8],16) % len(palette)]
+    if type(restore) is not bool:
+        raise ProfileSettingsError('restore_tabs must be a boolean')
+    if not isinstance(extension,str) or (extension and not re.fullmatch(r'[a-f0-9]{32}',extension)):
+        raise ProfileSettingsError('Invalid extension set')
+    if not isinstance(color,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',color):
+        raise ProfileSettingsError('Invalid window frame color')
+    return {'restore_tabs':restore,'extension_set':extension,'frame_color':color.lower(), **policy}
 
 
 def browser_settings(data: dict) -> dict:

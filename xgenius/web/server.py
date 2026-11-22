@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from contextlib import ExitStack
 from datetime import datetime
 import webbrowser
 from pathlib import Path
@@ -28,11 +29,16 @@ from xgenius.jobs import JobManager
 from xgenius.profile_archive import ArchiveError, export_package, import_package, inspect_package
 from xgenius.preferences import read_preferences, save_preferences
 from xgenius.updates import UpdateError, UpdateManager
+from xgenius.profile_leases import ProfileLease
+from xgenius.extension_sets import ExtensionSetStore
+from xgenius.window_frames import set_frames_enabled, attach_frame
+from xgenius.profile_settings import workspace_settings
+from xgenius.web.workspace_api import WorkspaceApiMixin
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
-class WebApp:
+class WebApp(WorkspaceApiMixin):
     def __init__(self, loop: asyncio.AbstractEventLoop, desktop_mode: bool = False):
         self.loop = loop
         self.desktop_mode = desktop_mode
@@ -121,7 +127,14 @@ class WebApp:
         if request.method == 'GET':
             return self._json(read_preferences())
         try:
-            return self._json(save_preferences(await request.json()))
+            prefs = save_preferences(await request.json())
+            set_frames_enabled(prefs['window_frames'])
+            if self.engine is not None:
+                for account in self.engine.account_manager.load_accounts():
+                    st = self.engine.account_manager.accounts.get(account['username'])
+                    if st and st.browser:
+                        attach_frame(st.browser,workspace_settings(account)['frame_color'],True)
+            return self._json(prefs)
         except ValueError as exc:
             raise ActionError(str(exc)) from exc
 
@@ -279,13 +292,16 @@ class WebApp:
         actions = self._require_engine()
         body = await request.json()
         accounts = actions.am.load_accounts()
+        privacy = body.get('privacy')
+        from xgenius.profile_archive import _privacy_policy
+        _privacy_policy(privacy)
         names = {a['username'] for a in accounts} if body.get('all') else set(self._usernames(body))
         known = {a['username'] for a in accounts}
         if not names or not names.issubset(known):
             raise ActionError('No profiles to export')
         for name in names:
             state = actions.am.accounts.get(name)
-            if name in actions._busy or name in actions._closing or (state and state.browser):
+            if name in actions._busy or name in actions._closing or name in actions._transferring or name in actions._profile_operations or (state and state.browser):
                 raise ActionError('Close the selected profiles before exporting')
         selected = [a for a in accounts if a['username'] in names]
         destination = self.transfer_directory() / f'XAnty-profiles-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}.xanty'
@@ -295,8 +311,12 @@ class WebApp:
             actions._transferring.update(names)
             job.update(phase='exporting', total=len(selected))
             try:
-                result = await asyncio.to_thread(export_package, self.engine.config, selected, destination,
-                                                job.update, job.cancelled, folders)
+                def export_locked():
+                    with ExitStack() as leases:
+                        for name in names:
+                            leases.enter_context(ProfileLease.acquire(self.engine.config,name))
+                        return export_package(self.engine.config, selected, destination, job.update,job.cancelled,folders,privacy)
+                result = await asyncio.to_thread(export_locked)
                 job.file_path = destination
                 return result
             finally:
@@ -382,15 +402,67 @@ class WebApp:
         self._require_engine().edit_account(request.match_info["username"], await request.json())
         return self._json({"ok": True})
 
+    async def api_profile_tool(self,request):
+        if request.method == 'GET' and request.match_info['tool'] != 'cookies':
+            raise web.HTTPMethodNotAllowed(request.method,['POST'])
+        body = await request.json() if request.method == 'POST' and request.can_read_body else {}
+        result = await self._require_engine().profile_tool(request.match_info['username'],request.match_info['tool'],body)
+        return self._json({'ok':True,**result})
+
+    async def api_extension_sets(self,request):
+        store = ExtensionSetStore(self._require_engine().e.config)
+        if request.method == 'GET':
+            return self._json({'sets':await self.actions._run_profile_worker(store.list)})
+        body = await request.json()
+        if request.method == 'DELETE':
+            await self.actions._run_profile_worker(store.delete,body.get('id'))
+            return self._json({'ok':True})
+        result = await self.actions._run_profile_worker(store.save,body.get('name'),body.get('directories'),body.get('id'))
+        return self._json({'ok':True,'set':result})
+
     async def api_accounts_delete(self, request):
         body = await request.json()
-        n = self._require_engine().delete(self._usernames(body))
+        n = self._require_engine().delete(self._usernames(body), body.get('retention_days', 30), body.get('confirmation'))
         return self._json({"ok": True, "deleted": n})
+
+    async def api_metadata(self, request):
+        actions = self._require_engine()
+        body = await request.json()
+        n = actions.am.update_profile_metadata(self._usernames(body), body.get('metadata'))
+        self.engine.notify()
+        return self._json({'ok': True, 'updated': n})
+
+    async def api_history(self, request):
+        events = self._require_engine().am.profile_history(request.query.get('username'))
+        return self._json({'events': events})
+
+    async def api_trash(self, request):
+        return self._json({'profiles': self._require_engine().am.trash_rows()})
+
+    async def api_trash_action(self, request):
+        actions = self._require_engine()
+        body = await request.json()
+        names = self._usernames(body)
+        if any(u in actions._busy or u in actions._closing or u in actions._transferring for u in names):
+            raise ActionError('Wait for the profile to finish opening or closing')
+        operation = request.match_info['operation']
+        if operation == 'restore':
+            n = actions.am.restore_profiles(names)
+            actions._sync_folders(actions.am.load_accounts())
+        elif operation == 'retention':
+            n = actions.am.set_trash_retention(names, body.get('retention_days'))
+        elif operation == 'purge':
+            actions.confirm_important_delete(names,body.get('confirmation'),trashed=True)
+            n = await self.loop.run_in_executor(None, actions.am.purge_trash, names)
+        else:
+            raise web.HTTPNotFound()
+        self.engine.notify()
+        return self._json({'ok': True, 'updated': n})
 
     async def api_bulk_edit(self, request):
         body = await request.json()
         n = self._require_engine().bulk_edit(self._usernames(body), body.get("group"), body.get("proxies"),
-                                             body.get("auto_login"), body.get("settings"))
+                                             body.get("auto_login"), body.get("settings"), body.get('metadata'))
         return self._json({"ok": True, "updated": n})
 
     async def api_auto_login(self, request):
@@ -487,18 +559,23 @@ class WebApp:
     @web.middleware
     async def errors_middleware(self, request, handler):
         profile_request = (request.method not in ('GET', 'HEAD') and request.path.startswith(
-            ('/api/accounts', '/api/folders', '/api/actions', '/api/profiles', '/api/dolphin')))
+            ('/api/accounts', '/api/folders', '/api/actions', '/api/profiles', '/api/dolphin', '/api/trash', '/api/workspace', '/api/window-sets')))
         if profile_request:
             self._active_profile_requests += 1
         try:
+            if request.method not in ('GET','HEAD') and self.actions is not None and self.actions._stopping:
+                raise ActionError('Application is shutting down')
+            if profile_request and self.engine is not None and (
+                    getattr(self.engine,'_backup_running',False) or getattr(self.actions,'_version_switching',False)):
+                raise ActionError('Wait for the backup or Chromium version switch to finish.')
             if (self.updates.installing and request.method not in ('GET', 'HEAD')
                     and not request.path.startswith('/api/updates')):
                 raise UpdateError('The update is being installed. Please wait for XAnty to restart.')
-            if request.method not in ('GET', 'HEAD') and request.path.startswith(('/api/accounts', '/api/folders', '/api/actions')):
+            if request.method not in ('GET', 'HEAD') and request.path.startswith(('/api/accounts', '/api/folders', '/api/actions', '/api/trash', '/api/window-sets')):
                 if any(j.status == 'running' and j.kind in ('import', 'export') for j in self.jobs.jobs.values()):
                     raise ActionError('Profile transfer is running; wait for it to finish')
             return await handler(request)
-        except (ActionError, ArchiveError, UpdateError) as e:
+        except (ActionError, ArchiveError, UpdateError, ValueError) as e:
             return self._json({"ok": False, "error": str(e)}, status=400)
         except web.HTTPException:
             raise
@@ -543,6 +620,29 @@ class WebApp:
             web.post("/api/profiles/import", self.api_profile_import),
             web.get("/api/profiles/download/{job_id}", self.api_profile_download),
             web.post("/api/accounts/delete", self.api_accounts_delete),
+            web.get('/api/extension-sets', self.api_extension_sets),
+            web.post('/api/extension-sets', self.api_extension_sets),
+            web.delete('/api/extension-sets', self.api_extension_sets),
+            web.get('/api/accounts/{username}/tools/{tool}', self.api_profile_tool),
+            web.post('/api/accounts/{username}/tools/{tool}', self.api_profile_tool),
+            web.patch('/api/accounts/metadata', self.api_metadata),
+            web.get('/api/history', self.api_history),
+            web.get('/api/workspace', self.api_workspace),
+            web.get('/api/workspace/chromium/available', self.api_chromium_available),
+            web.post('/api/workspace/chromium/install', self.api_chromium_install),
+            web.post('/api/workspace/chromium/select', self.api_chromium_select),
+            web.delete('/api/workspace/chromium', self.api_chromium_select),
+            web.get('/api/workspace/backups', self.api_backups),
+            web.put('/api/workspace/backups', self.api_backups),
+            web.post('/api/workspace/backups/run', self.api_backup_run),
+            web.get('/api/workspace/storage', self.api_storage),
+            web.post('/api/workspace/storage', self.api_storage),
+            web.get('/api/window-sets', self.api_window_sets),
+            web.post('/api/window-sets', self.api_window_sets),
+            web.delete('/api/window-sets', self.api_window_sets),
+            web.post('/api/window-sets/{set_id}/open', self.api_window_set_open),
+            web.get('/api/trash', self.api_trash),
+            web.post('/api/trash/{operation}', self.api_trash_action),
             web.post("/api/accounts/bulk_edit", self.api_bulk_edit),
             web.post("/api/accounts/auto_login", self.api_auto_login),
             web.post("/api/accounts/move", self.api_accounts_move),
@@ -606,7 +706,6 @@ def open_ui(url: str) -> None:
 
 
 def serve() -> None:
-    force_kill_chromedrivers()
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     loop = asyncio.new_event_loop()
@@ -622,6 +721,5 @@ def serve() -> None:
             pass
     finally:
         print("Final cleanup...")
-        force_kill_chromedrivers()
         loop.close()
         sys.exit(0)

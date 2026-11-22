@@ -67,13 +67,18 @@ class Config:
         if base_dir is None:
             raise ConfigError("Базовая папка не выбрана (нет paths.json). Откройте экран Setup.")
         self.base_dir = Path(base_dir)
-        self.chrome_path, self.chromedriver_path = get_paths_from_base(self.base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.refresh_browser_paths()
         self.browser_profiles_dir = self.base_dir / "browser_profiles"
         self.browser_profiles_dir.mkdir(parents=True, exist_ok=True)
         self.accounts_file = self.base_dir / "accounts.json"
         self.logs_dir = self.base_dir / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
+
+    def refresh_browser_paths(self) -> None:
+        """Apply the validated selected pair; retain Bro/Drivers as the default."""
+        from xgenius.chromium_versions import ChromiumVersionManager
+        self.chrome_path, self.chromedriver_path = ChromiumVersionManager(self).active_paths()
 
     def get_profile_dir(self, username: str) -> Path:
         profile_dir = self.browser_profiles_dir / f"profile_{username}"

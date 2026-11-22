@@ -19,6 +19,8 @@ from xgenius.core import classify_driver_error
 from xgenius.models import AccountCredentials, AccountState
 from xgenius.process_utils import hard_close_browser
 from xgenius.proxy_service import ProxyCheckError
+from xgenius.profile_metadata import record_session_time
+from xgenius.browser_workspace import restore_tabs
 
 
 class AuthMixin:
@@ -49,6 +51,8 @@ class AuthMixin:
                     break
             self.save_accounts(accounts_data)
         self.logger.info(f"Session opened ({how})", credentials.username)
+        await asyncio.get_running_loop().run_in_executor(None, restore_tabs, browser, self.config,
+                                                        credentials.username, credentials.restore_tabs)
 
     async def login_account(self, credentials: AccountCredentials, fetch_followers: bool = True,
                             notify: bool = True) -> None:
@@ -80,6 +84,7 @@ class AuthMixin:
         # новый браузер на том же --user-data-dir не стартует. Закрываем принудительно.
         stale = account_state.browser
         if stale is not None:
+            record_session_time(self, credentials.username)
             account_state.browser = None
             await loop.run_in_executor(None, hard_close_browser, stale)
 
@@ -87,6 +92,7 @@ class AuthMixin:
         try:
             browser = await self.browser_manager.create_browser(credentials)
             account_state.browser = browser
+            record_session_time(self, credentials.username, opened=True)
             account_state.browser_version = browser._xg_browser_version
             account_state.browser_user_agent = browser._xg_user_agent
             account_state.proxy_ip = browser._xg_proxy_ip
@@ -98,6 +104,8 @@ class AuthMixin:
                 await loop.run_in_executor(None, lambda: browser.get("about:blank"))
                 account_state.is_active = False
                 account_state.last_action_time = datetime.now()
+                await loop.run_in_executor(None, restore_tabs, browser, self.config,
+                                           credentials.username, credentials.restore_tabs)
                 self.logger.info("Browser opened; X auto sign-in disabled", credentials.username)
                 return
             try:
@@ -156,6 +164,7 @@ class AuthMixin:
             # При автоматическом входе (notify=False) неуправляемый Chrome не оставляем.
             # При ручном Login окно оставляем открытым — оператор может решить капчу/код.
             if not notify and browser is not None and account_state.browser is browser:
+                record_session_time(self, credentials.username)
                 account_state.browser = None
                 await loop.run_in_executor(None, hard_close_browser, browser)
             if isinstance(e, ProxyCheckError):

@@ -1,6 +1,4 @@
-"""
-Создание Chrome: флаги против нагрузки, прокси-расширение, stealth, CDP-блокировка медиа.
-"""
+"""Create Chrome with profile settings, local resource policy and proxy authentication."""
 
 import asyncio
 import json
@@ -16,11 +14,16 @@ from xgenius.config import Config
 from xgenius.models import AccountCredentials, BrowserConfig
 from xgenius.process_utils import hard_close_browser
 from xgenius.proxy_service import IP_CHECK_URL, ProxyCheckError, check_proxy, parse_ip_response, parse_proxy
-from xgenius.profile_settings import ProfileSettingsError, browser_settings
-from xgenius.settings import BLOCK_MEDIA_URLS
+from xgenius.profile_settings import ProfileSettingsError, browser_settings, workspace_settings
+from xgenius.browser_policy import BrowserPolicyError, prepare_policy_extension
+from xgenius.error_messages import safe_launch_error
 from xgenius.portable_session import apply_session
 from xgenius.browser_search import SearchConfigurationError, ensure_search_engine
 from xgenius.browser_lifecycle import track_browser_process
+from xgenius.profile_leases import ProfileLease
+from xgenius.browser_workspace import prepare_workspace, browser_lock
+from xgenius.extension_sets import ExtensionSetStore
+from xgenius.window_frames import attach_frame
 
 
 # Размер экрана нужен для позиционирования окон Chrome (без tkinter: WinAPI на Windows)
@@ -40,9 +43,51 @@ class BrowserManager:
     def __init__(self, config: Config, browser_config: BrowserConfig):
         self.config = config
         self.browser_config = browser_config
+        self._launches = set()
+        self._cleanups = set()
+        self._stopping = False
+
+    async def shutdown(self):
+        self._stopping = True
+        while self._launches or self._cleanups:
+            await asyncio.gather(*list(self._launches | self._cleanups), return_exceptions=True)
 
     async def create_browser(self, credentials: AccountCredentials) -> webdriver.Chrome:
+        if self._stopping:
+            raise ValueError('Application is shutting down')
+        profile = self.config.get_profile_dir(credentials.username)
+        lease = ProfileLease.acquire_path(profile)
+        task = asyncio.create_task(self._create_browser(credentials))
+        self._launches.add(task)
+        task.add_done_callback(self._launches.discard)
+        try:
+            browser = await asyncio.shield(task)
+            browser._xg_profile_lease = lease
+            if self._stopping:
+                await asyncio.get_running_loop().run_in_executor(None,hard_close_browser,browser)
+                raise ValueError('Application is shutting down')
+            return browser
+        except asyncio.CancelledError:
+            async def cleanup_late_launch():
+                try:
+                    late = await task
+                    late._xg_profile_lease = lease
+                    await asyncio.get_running_loop().run_in_executor(None, hard_close_browser, late)
+                except Exception:
+                    pass
+                finally:
+                    lease.release()
+            cleanup = asyncio.create_task(cleanup_late_launch())
+            self._cleanups.add(cleanup)
+            cleanup.add_done_callback(self._cleanups.discard)
+            raise
+        except BaseException:
+            lease.release()
+            raise
+
+    async def _create_browser(self, credentials: AccountCredentials) -> webdriver.Chrome:
         # Fail before starting Chrome, including automatic recovery paths.
+        workspace = workspace_settings(vars(credentials))
         proxy = parse_proxy(credentials.proxy)
         loop = asyncio.get_event_loop()
         expected_ip = await loop.run_in_executor(None, check_proxy, proxy)
@@ -64,27 +109,31 @@ class BrowserManager:
             options.add_argument("--no-default-browser-check")
             options.add_argument("--no-first-run")
             options.add_argument("--disable-dev-shm-usage") # Обязательно для экономии RAM
-            options.add_argument("--disable-background-networking")
             options.add_argument("--disable-background-mode")
             options.add_argument("--disable-search-engine-choice-screen")
-            options.add_argument("--disable-component-update")
             options.add_argument("--disable-sync")
             options.add_argument("--disable-default-apps")
-            options.add_argument("--disable-client-side-phishing-detection")
             options.add_argument("--metrics-recording-only")
             options.add_argument("--log-level=3")
             # Видео в ленте/чатах не стартует само — самый большой пожиратель CPU без GPU
             options.add_argument("--autoplay-policy=user-gesture-required")
             options.add_argument("--disable-features=Translate,MediaRouter,OptimizationHints,InterestFeedContentSuggestions,BackForwardCache")
+            # ChromeDriver supplies these switches by default in some versions.
+            # Background networking and component updates keep native Safe
+            # Browsing lists/models current alongside our local address hints.
+            options.add_experimental_option('excludeSwitches', [
+                'disable-background-networking', 'disable-client-side-phishing-detection',
+                'disable-component-update'])
 
             prefs = {
-                # Картинки оставляем (их отключение не ломает React, но операторы хотят видеть чаты)
                 "profile.default_content_setting_values.notifications": 2,
                 "profile.default_content_setting_values.geolocation": 2,
                 "profile.default_content_settings.popups": 0,
                 "credentials_enable_service": False,
                 "profile.password_manager_enabled": False,
                 "background_mode.enabled": False,
+                "session.restore_on_startup": 1 if workspace['restore_tabs'] else 5,
+                "safebrowsing.enabled": True,
             }
             settings = browser_settings(vars(credentials))
             if settings['browser_language']:
@@ -96,6 +145,13 @@ class BrowserManager:
             # 3. Увеличиваем ширину окна до десктопного брейкпоинта (минимум 1024px)
             user_profile = str(self.config.get_profile_dir(credentials.username))
             options.add_argument(f"--user-data-dir={user_profile}")
+            if workspace['restore_tabs']:
+                options.add_argument('--restore-last-session')
+            extension_paths = ExtensionSetStore(self.config).materialize(workspace['extension_set'], Path(user_profile))
+            policy_extension = await loop.run_in_executor(
+                None, prepare_policy_extension, Path(user_profile), workspace)
+            if policy_extension is not None:
+                extension_paths.append(policy_extension)
 
             if credentials.headless:
                 options.add_argument("--headless=new")
@@ -113,12 +169,22 @@ class BrowserManager:
             options.add_argument(f"--proxy-server={proxy.server}")
             if proxy.username:
                 extension_dir = self._add_proxy_authentication(options, proxy)
+            if extension_paths:
+                if extension_dir is not None:
+                    extension_paths.append(Path(extension_dir.name))
+                for argument in list(options.arguments):
+                    if argument.startswith('--load-extension='):
+                        options.arguments.remove(argument)
+                options.add_argument('--load-extension=' + ','.join(str(p) for p in extension_paths))
             
             driver_service = Service(str(driver_path))
             
             browser = await loop.run_in_executor(None, lambda: webdriver.Chrome(service=driver_service, options=options))
             browser._xg_proxy_extension = extension_dir
+            browser_lock(browser)
             track_browser_process(browser)
+            await loop.run_in_executor(None, prepare_workspace, browser)
+            attach_frame(browser, workspace['frame_color'], credentials.window_frame_enabled)
             browser.set_script_timeout(10)
             await loop.run_in_executor(None, ensure_search_engine, browser)
 
@@ -127,21 +193,6 @@ class BrowserManager:
                 browser._xg_pid = driver_service.process.pid
             except Exception:
                 browser._xg_pid = None
-
-            if BLOCK_MEDIA_URLS:
-                # Режем тяжёлые запросы на уровне CDP: видео и аналитика. Картинки не трогаем.
-                try:
-                    await loop.run_in_executor(None, lambda: browser.execute_cdp_cmd("Network.enable", {}))
-                    await loop.run_in_executor(None, lambda: browser.execute_cdp_cmd("Network.setBlockedURLs", {
-                        "urls": [
-                            "*://video.twimg.com/*", "*.mp4", "*.m3u8", "*.webm",
-                            "*://ads-api.twitter.com/*", "*://ads-api.x.com/*",
-                            "*://analytics.twitter.com/*", "*://*.doubleclick.net/*",
-                            "*://*.google-analytics.com/*", "*://*.googletagmanager.com/*",
-                        ]
-                    }))
-                except Exception as e:
-                    print(f"CDP block URLs failed (non-fatal): {e}")
 
             # Keep compatibility scripts aligned with this Chrome process. When
             # WebGL details are unavailable, leave the native browser values alone.
@@ -213,10 +264,11 @@ class BrowserManager:
                 await loop.run_in_executor(None, hard_close_browser, browser)
             elif extension_dir is not None:
                 extension_dir.cleanup()
-            if isinstance(exc, (ProxyCheckError, ProfileSettingsError, SearchConfigurationError)):
+            if isinstance(exc, (ProxyCheckError, ProfileSettingsError, BrowserPolicyError, SearchConfigurationError)):
                 raise
             if browser is None:
-                raise ProxyCheckError("Chrome could not start. Check Chrome and ChromeDriver paths/versions.") from None
+                detail = safe_launch_error(exc, vars(credentials))
+                raise ProfileSettingsError('Chrome could not start: ' + detail) from None
             raise ProxyCheckError("Chrome could not complete proxy IP verification.") from None
 
     def _add_proxy_authentication(self, options: Options, proxy):

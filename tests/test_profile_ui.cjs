@@ -4,7 +4,8 @@ const vm = require('node:vm');
 const context = vm.createContext({console, Set, FormData: class {},
   document: {addEventListener(){}}, setTimeout(){},
   I18N:{error:x=>x}, t:(key, args)=>key + JSON.stringify(args||{}), I:()=>'<svg></svg>'});
-vm.runInContext(fs.readFileSync('xgenius/web/static/app.js','utf8'), context);
+for (const name of ['profile-management.js','workspace-operations.js','app.js'])
+  vm.runInContext(fs.readFileSync('xgenius/web/static/'+name,'utf8'), context);
 const run = source=>vm.runInContext(source,context);
 run(`S.data={accounts:[
   {username:'alice',group:'Work',proxy:'host:80',proxy_status:'ok',proxy_ip:'8.8.8.8',proxy_location:{country_code:'US',country:'United States',region:'Florida'}},

@@ -29,6 +29,14 @@ class AccountCredentials:
     browser_timezone: str = ""
     window_width: int = 1024
     window_height: int = 768
+    restore_tabs: bool = True
+    extension_set: str = ''
+    frame_color: str = '#a46bff'
+    window_frame_enabled: bool = True
+    block_images: bool = False
+    block_media: bool = False
+    block_fonts: bool = False
+    phishing_protection: bool = True
 
 
 @dataclass
@@ -57,3 +65,5 @@ class AccountState:
     launch_error_seq: int = 0
     browser_version: str = ""
     browser_user_agent: str = ""
+    session_saved_at: str = ''
+    session_save_error: str = ''

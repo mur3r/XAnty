@@ -6,8 +6,10 @@ import psutil
 
 def track_browser_process(browser) -> None:
     browser._xg_browser_process = None
+    browser._xg_driver_process = None
     try:
         driver = psutil.Process(browser.service.process.pid)
+        browser._xg_driver_process = driver
         for process in driver.children(recursive=True):
             if process.name().lower() not in ('chrome.exe', 'chrome', 'chromium.exe', 'chromium'):
                 continue

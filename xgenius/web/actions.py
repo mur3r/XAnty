@@ -6,6 +6,7 @@ GUI-миксинов (sessions / login_parse / dialogs / settings_windows), бе
 import asyncio
 import json
 import re
+from contextlib import ExitStack
 from typing import Any, Dict, List, Optional, Tuple
 
 from xgenius.models import AccountCredentials, AccountState
@@ -16,7 +17,14 @@ from xgenius.auto_login_policy import apply_auto_login, is_auto_login_enabled
 from xgenius.process_utils import hard_close_browser, kill_orphan_chrome
 from xgenius.proxy_service import ProxyCheckError, check_proxy, lookup_proxy_location, parse_proxy
 from xgenius.error_messages import safe_launch_error
-from xgenius.profile_settings import ProfileSettingsError, browser_settings
+from xgenius.profile_settings import ProfileSettingsError, browser_settings, workspace_settings
+from xgenius.preferences import read_preferences
+from xgenius.browser_workspace import browser_lock, save_workspace, parse_cookie_input, live_cookies, clear_cache, profile_directory
+from xgenius.profile_leases import ProfileLease
+from xgenius.portable_session import export_session, store_session
+from xgenius.extension_sets import ExtensionSetStore
+from xgenius.network_diagnostics import diagnose
+from xgenius.profile_metadata import metadata_values, record_session_time, name_key
 from xgenius.settings import LOGIN_DELAY_SECONDS
 
 
@@ -39,6 +47,7 @@ def _credentials(acc: dict) -> AccountCredentials:
         ct0_token=acc.get("ct0_token"),
         auto_login=is_auto_login_enabled(acc),
         **settings,
+        **workspace_settings(acc), window_frame_enabled=read_preferences()['window_frames'],
     )
 
 
@@ -50,6 +59,42 @@ class Actions:
         self._transferring: set = set()
         self._proxy_checks = {}
         self._launch_tasks = set()
+        self._profile_operations = set()
+        self._closing_futures = set()
+        self._file_futures = set()
+        self._stopping = False
+        self.e.actions = self
+        self.am._session_is_busy = lambda u: u in self._busy or u in self._closing or u in self._transferring or u in self._profile_operations
+
+    async def shutdown(self):
+        self._stopping = True
+        tasks = list(self._launch_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks,return_exceptions=True)
+        manager = getattr(self.am,'browser_manager',None)
+        if manager is not None:
+            await manager.shutdown()
+        if self._closing_futures or self._file_futures:
+            await asyncio.gather(*[asyncio.shield(f) for f in self._closing_futures | self._file_futures],return_exceptions=True)
+
+    async def _run_profile_worker(self, function, *args):
+        if self._stopping:
+            raise ActionError('Application is shutting down')
+        future = self.e.loop.run_in_executor(None,function,*args)
+        self._file_futures.add(future)
+        future.add_done_callback(self._file_futures.discard)
+        try:
+            return await asyncio.shield(future)
+        except asyncio.CancelledError:
+            # A disconnected request does not stop a disk worker. Keep caller
+            # reservations alive until the real filesystem operation completes.
+            try:
+                await asyncio.shield(future)
+            except (Exception,asyncio.CancelledError):
+                pass
+            raise
 
     # ------------------------------------------------------------------ helpers
     @property
@@ -240,7 +285,7 @@ class Actions:
         if st and st.browser:
             self._log("Browser profile is already open", username)
             return True
-        if username in self._busy or username in self._closing or username in self._transferring:
+        if username in self._busy or username in self._closing or username in self._transferring or username in self._profile_operations:
             self._log("Логин уже выполняется", username, "warning")
             return False
         self._busy.add(username)
@@ -294,7 +339,9 @@ class Actions:
             self._log(f"Login completed: {ok}/{total} accounts successfully logged in")
 
     def start_login(self, usernames: List[str]) -> int:
-        usernames = [u for u in usernames if u not in self._busy and u not in self._closing and u not in self._transferring]
+        if self._stopping:
+            raise ActionError('Application is shutting down')
+        usernames = [u for u in usernames if u not in self._busy and u not in self._closing and u not in self._transferring and u not in self._profile_operations]
         if not usernames:
             raise ActionError("Нечего запускать: аккаунты не выбраны или уже логинятся")
         if len(usernames) == 1:
@@ -310,6 +357,7 @@ class Actions:
     def _close_state(self, st: AccountState):
         u = st.username
         browser = st.browser
+        record_session_time(self.am, u)
         st.browser = None
         st.is_active = False
         st.need_relogin = False
@@ -318,16 +366,21 @@ class Actions:
         if browser is not None:
             self._closing.add(u)
             def persist_and_close():
-                try:
-                    save_cookies(browser, self.e.config, u)
-                except Exception as exc:
-                    self._log(f"Could not save session: {type(exc).__name__}", u, "warning")
-                finally:
+                with browser_lock(browser):
                     try:
-                        hard_close_browser(browser)
+                        save_workspace(browser, self.e.config, u)
+                        save_cookies(browser, self.e.config, u)
+                    except Exception as exc:
+                        self._log(f"Could not save session: {type(exc).__name__}", u, "warning")
                     finally:
-                        self.e.loop.call_soon_threadsafe(self._closing.discard, u)
-            return self.e.loop.run_in_executor(None, persist_and_close)
+                        try:
+                            hard_close_browser(browser)
+                        finally:
+                            self.e.loop.call_soon_threadsafe(self._closing.discard, u)
+            future = self.e.loop.run_in_executor(None, persist_and_close)
+            self._closing_futures.add(future)
+            future.add_done_callback(self._closing_futures.discard)
+            return future
         return None
 
     def close(self, usernames: List[str]) -> int:
@@ -352,8 +405,7 @@ class Actions:
                 pending.append(task)
         async def cleanup():
             if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
-            await self.e.loop.run_in_executor(None, kill_orphan_chrome, self.e.config.browser_profiles_dir)
+                await asyncio.gather(*[asyncio.shield(f) for f in pending], return_exceptions=True)
         self.e.loop.create_task(cleanup())
         self._log(f"All sessions closed ({n})")
         self.e.notify()
@@ -378,25 +430,120 @@ class Actions:
         self.e.notify()
         return count
 
-    def delete(self, usernames: List[str]) -> int:
-        accounts = self.am.load_accounts()
+    def confirm_important_delete(self, usernames, confirmation=None, trashed=False):
+        records = self.am.trash_rows() if trashed else self.am.load_accounts()
+        selected = set(usernames)
+        if any(a.get('important') or a.get('favorite') for a in records if a['username'] in selected):
+            if confirmation != 'DELETE':
+                raise ActionError('Type DELETE to confirm deletion of an important or favorite profile.')
+
+    def delete(self, usernames: List[str], retention_days: int = 30, confirmation=None) -> int:
+        self.confirm_important_delete(usernames, confirmation)
         for u in usernames:
             st = self._state(u)
-            if st:
-                self._close_state(st)  # раньше браузер удалённого аккаунта оставался открытым
-                del self.am.accounts[u]
-        remaining = [a for a in accounts if a.get("username") not in set(usernames)]
-        self.am.save_accounts(remaining)
-        self._log(f"Deleted {len(usernames)} account(s): {', '.join(usernames)}")
+            if u in self._busy or u in self._closing or u in self._transferring or u in self._profile_operations or (st and st.browser):
+                raise ActionError('Закройте выбранные профили и дождитесь завершения операций перед удалением в корзину.')
+        with ExitStack() as leases:
+            for username in usernames:
+                leases.enter_context(ProfileLease.acquire(self.e.config,username))
+            n = self.am.trash_profiles(usernames, retention_days)
+        for u in usernames:
+            self.am.accounts.pop(u, None)
+        self._log(f"Moved {n} profile(s) to trash")
         self.e.notify()
-        return len(usernames)
+        return n
+
+    async def open_window_set(self, set_id, exact=True, confirm_close=False):
+        if type(exact) is not bool or type(confirm_close) is not bool:
+            raise ActionError('Window set options must be booleans')
+        names = self.am.resolve_window_set(set_id)
+        if self._stopping or self._busy or self._closing or self._transferring or self._profile_operations or any(not t.done() for t in self._launch_tasks):
+            raise ActionError('Wait for current profile operations to finish')
+        outside = [st for u, st in self.am.accounts.items() if st.browser and u not in names] if exact else []
+        if outside and not confirm_close:
+            raise ActionError('Confirm closing profiles outside this window set.')
+        reserved = set(names) | {st.username for st in outside}
+        self._profile_operations.update(reserved)
+        try:
+            pending = [future for st in outside if (future := self._close_state(st)) is not None]
+            if pending:
+                await asyncio.gather(*[asyncio.shield(f) for f in pending])
+            to_open = [u for u in names if not (self._state(u) and self._state(u).browser)]
+        finally:
+            self._profile_operations.difference_update(reserved)
+        opened = self.start_login(to_open) if to_open else 0
+        self.e.notify()
+        return {'opened':opened,'closed':len(outside)}
 
     # ------------------------------------------------------------------ accounts CRUD
     def get_account(self, username: str) -> dict:
         acc = self._account(username)
         if not acc:
             raise ActionError("Account not found")
-        return {**acc, **browser_settings(acc), "auto_login": is_auto_login_enabled(acc)}
+        return {**acc, **browser_settings(acc), **workspace_settings(acc), "auto_login": is_auto_login_enabled(acc)}
+
+    def _idle_profile(self, username, require_closed=False):
+        if self._stopping:
+            raise ActionError('Application is shutting down')
+        if self._account(username) is None:
+            raise ActionError('Account not found')
+        st = self._state(username)
+        if self.am._session_is_busy(username):
+            raise ActionError('Wait for the profile to finish opening or closing')
+        if require_closed and st and st.browser:
+            raise ActionError('Close this profile before changing local files')
+        return st
+
+    async def profile_tool(self, username, operation, data=None):
+        st = self._idle_profile(username, require_closed=operation in ('cache','cookies_import'))
+        data = data or {}
+        browser = st.browser if st else None
+        if operation == 'folder':
+            import os
+            path = profile_directory(self.e.config, username)
+            path.mkdir(parents=True, exist_ok=True)
+            if not hasattr(os, 'startfile'):
+                raise ActionError('Opening profile folders is available on Windows')
+            os.startfile(str(path))
+            return {'path': str(path)}
+        if operation in ('save','diagnostics') and not (st and st.browser):
+            raise ActionError('Browser is not open')
+        self._profile_operations.add(username)
+        try:
+            if operation == 'cache':
+                return await self._run_profile_worker( clear_cache, self.e.config, username)
+            if operation == 'cookies':
+                if st and st.browser:
+                    def read_live():
+                        with browser_lock(browser):
+                            return live_cookies(browser)
+                    cookies = await self._run_profile_worker( read_live)
+                    return {'cookies': cookies, 'source':'live', 'warnings':[]}
+                def read_saved():
+                    with ProfileLease.acquire(self.e.config,username):
+                        cookies, warnings = export_session(self.e.config,username)
+                        return {'cookies':cookies,'source':'saved','warnings':warnings}
+                return await self._run_profile_worker(read_saved)
+            if operation == 'cookies_import':
+                cookies = parse_cookie_input(data.get('cookies'))
+                def import_prepared():
+                    with ProfileLease.acquire(self.e.config,username):
+                        previous, _ = export_session(self.e.config,username)
+                        merged = {(c['domain'],c['path'],c['name']):c for c in previous}
+                        merged.update({(c['domain'],c['path'],c['name']):c for c in cookies})
+                        store_session(self.e.config,username,list(merged.values()),pending=True)
+                    return {'imported':len(cookies),'total':len(merged)}
+                return await self._run_profile_worker( import_prepared)
+            if operation == 'diagnostics':
+                return await self._run_profile_worker( diagnose, browser, st.proxy_ip)
+            if operation == 'save':
+                result = await self._run_profile_worker( save_workspace, browser, self.e.config,username)
+                st.session_saved_at = result['saved_at']; st.session_save_error = ''
+                self.e.notify()
+                return result
+            raise ActionError('Unknown profile tool')
+        finally:
+            self._profile_operations.discard(username)
 
     async def export_cookies(self, username: str) -> list[dict]:
         if self._account(username) is None:
@@ -451,11 +598,15 @@ class Actions:
             raise ActionError("auto_login must be a boolean")
         try:
             settings = browser_settings(data)
+            settings.update(workspace_settings({**data, 'username':username}))
+            metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note') if k in data})
         except ProfileSettingsError as exc:
             raise ActionError(str(exc)) from exc
         acs = self.am.load_accounts()
         if any(a["username"] == username for a in acs):
             raise ActionError(f"Account with username '{username}' already exists!")
+        if name_key(username) in getattr(self.am,'reserved_profile_names',lambda:set())():
+            raise ActionError('A profile with this name already exists or is in trash')
         acs.append({
             "username": username,
             "profile_name": str(data.get("profile_name") or username).strip(),
@@ -469,8 +620,12 @@ class Actions:
             "auto_login": data.get("auto_login", False) is True,
             **settings,
             "headless": False,
+            **metadata,
         })
         self._sync_folders(acs)
+        if settings.get('extension_set'):
+            with ProfileLease.acquire(self.e.config,username):
+                ExtensionSetStore(self.e.config).materialize(settings['extension_set'], profile_directory(self.e.config,username))
         self.am.save_accounts(acs)
         self._log(f"Account added: {username}")
 
@@ -545,7 +700,8 @@ class Actions:
         if any(str(a.get('dolphin_profile_id', '')) == str(source_id) for a in accounts):
             raise ActionError('This Dolphin profile is already imported')
         username = account['username']
-        if any(a['username'].casefold() == username.casefold() for a in accounts):
+        reserved = getattr(self.am, 'reserved_profile_names', lambda: {name_key(a['username']) for a in accounts})()
+        if name_key(username) in reserved:
             raise ActionError('Username already exists; choose another username')
         path = get_cookies_file_path(self.e.config, username)
         if cookies and path.exists():
@@ -633,6 +789,7 @@ class Actions:
                         warnings.extend(w for w in mapping_warnings if not w.startswith(
                             ('Dolphin fingerprint', 'Local storage and extensions')))
                         reserved = {a['username'].casefold() for a in existing}
+                        reserved.update(getattr(self.am, 'reserved_profile_names', lambda: set())())
                         reserved.update(p.name.removeprefix('profile_').casefold()
                                         for p in self.e.config.browser_profiles_dir.glob('profile_*'))
                         cookies_root = self.e.config.base_dir / 'kook'
@@ -709,11 +866,13 @@ class Actions:
             raise ActionError("Account not found")
         try:
             settings = browser_settings({**previous, **data})
+            settings.update(workspace_settings({**previous,**data}))
+            metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note') if k in data})
         except ProfileSettingsError as exc:
             raise ActionError(str(exc)) from exc
         moves = []
         if new_username != original:
-            if original in self._busy or original in self._closing or (self._state(original) and self._state(original).browser):
+            if self.am._session_is_busy(original) or (self._state(original) and self._state(original).browser):
                 raise ActionError("Close the profile before renaming it")
             # Browser and cookie directories are keyed by username; move both when renaming.
             for root, prefix in ((self.e.config.browser_profiles_dir, 'profile_'),
@@ -739,6 +898,7 @@ class Actions:
                 # Keep old data for compatibility; Chrome now supplies its own UA.
                 a["user_agent"] = a.get("user_agent", "")
                 a.update(settings)
+                a.update(metadata)
                 if "profile_name" in data:
                     a["profile_name"] = str(data.get("profile_name") or new_username).strip()
                 if "notes" in data:
@@ -758,10 +918,14 @@ class Actions:
         self._sync_folders(acs)
         completed = []
         try:
-            for source, target in moves:
-                source.rename(target)
-                completed.append((source, target))
-            self.am.save_accounts(acs)
+            with ExitStack() as leases:
+                if new_username != original:
+                    for name in (original,new_username):
+                        leases.enter_context(ProfileLease.acquire_path(profile_directory(self.e.config,name),create_profile=False))
+                for source, target in moves:
+                    source.rename(target)
+                    completed.append((source, target))
+                self.am.save_accounts(acs)
         except Exception:
             for source, target in reversed(completed):
                 target.rename(source)
@@ -780,8 +944,10 @@ class Actions:
         self.e.notify()
 
     def bulk_edit(self, usernames: List[str], group: Optional[str], proxies_text: Optional[str],
-                  auto_login: Optional[bool] = None, settings: Optional[dict] = None) -> int:
+                  auto_login: Optional[bool] = None, settings: Optional[dict] = None,
+                  metadata: Optional[dict] = None) -> int:
         change_group = group is not None
+        metadata = metadata_values({} if metadata is None else metadata)
         settings = {} if settings is None else settings
         if not isinstance(settings, dict) or set(settings) - {
                 "browser_language", "browser_timezone", "window_width", "window_height"}:
@@ -794,7 +960,7 @@ class Actions:
             if len(proxies) != 1 and len(proxies) != len(usernames):
                 raise ActionError(
                     f"Incorrect number of proxies ({len(proxies)}). Provide 1 proxy for all, or {len(usernames)} (one per account).")
-        if not change_group and not proxies and auto_login is None and not settings:
+        if not change_group and not proxies and auto_login is None and not settings and not metadata:
             raise ActionError("No action selected. Choose folder, proxy, X auto-login or browser settings.")
         accounts = self.am.load_accounts()
         selected = set(usernames)
@@ -815,6 +981,7 @@ class Actions:
         n = 0
         for a in accounts:
             if a["username"] in usernames:
+                a.update(metadata)
                 if change_group:
                     a["group"] = group.strip()
                 if proxies:
