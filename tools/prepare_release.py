@@ -1,0 +1,53 @@
+"""Stamp each main-branch build with a version newer than the published release."""
+import json
+import os
+from pathlib import Path
+import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from xgenius import __version__
+from xgenius.updates import version_tuple
+
+
+def next_version(source, latest=None):
+    source_parts = version_tuple(source)
+    if latest and version_tuple(latest) >= source_parts:
+        parts = list(version_tuple(latest))
+        parts[-1] += 1
+        return '.'.join(map(str, parts))
+    return source.lstrip('v')
+
+
+def prepare():
+    import requests
+    repository = os.environ['GITHUB_REPOSITORY']
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
+        raise RuntimeError('Invalid repository.')
+    with requests.Session() as session:
+        session.trust_env = False
+        session.headers.update({'Accept': 'application/vnd.github+json', 'User-Agent': 'XAnty-release'})
+        token = os.environ.get('GH_TOKEN')
+        if token:
+            session.headers['Authorization'] = 'Bearer ' + token
+        response = session.get(f'https://api.github.com/repos/{repository}/releases/latest', timeout=(10, 30))
+        if response.status_code == 404:
+            latest = None
+        else:
+            response.raise_for_status()
+            latest = response.json()['tag_name']
+    version = next_version(__version__, latest)
+    path = ROOT / 'xgenius/__init__.py'
+    stamped, count = re.subn(r'^__version__ = "[^\"]+"', '__version__ = "' + version + '"', path.read_text(encoding='utf-8'), flags=re.M)
+    if count != 1:
+        raise RuntimeError('Cannot stamp the application version.')
+    path.write_text(stamped, encoding='utf-8', newline='\n')
+    (ROOT / 'xgenius/update_config.json').write_text(json.dumps({'repository': repository, 'asset': 'XAnty.exe'}), encoding='utf-8')
+    with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+        output.write(f'version={version}\ntag=v{version}\n')
+    print('Release version:', version)
+
+
+if __name__ == '__main__':
+    prepare()

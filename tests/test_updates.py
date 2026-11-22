@@ -69,6 +69,74 @@ class UpdateTests(unittest.TestCase):
 
 
 class UpdateGuardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_startup_checks_even_with_fresh_cache_and_installs_without_user_clicks(self):
+        import threading
+        import time
+        selected = updates.select_release(release('v2099.1.1.1'), 'example/XAnty', '2026.11.22.2')
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('xgenius.updates.application_home', return_value=Path(directory)), \
+                patch('xgenius.updates.read_update_config', return_value={'repository': 'example/XAnty'}), \
+                patch('xgenius.updates.supports_install', return_value=True), \
+                patch('xgenius.updates.fetch_release', return_value=selected) as fetch, \
+                patch('xgenius.updates.download_release') as download, \
+                patch.object(updates.UpdateManager, '_launch_helper') as install:
+            manager = updates.UpdateManager()
+            manager.last_checked = time.time()
+            messages = []
+            self.assertTrue(await manager.update_on_startup(threading.Event(), messages.append))
+            fetch.assert_called_once()
+            download.assert_called_once()
+            install.assert_called_once()
+            self.assertEqual(manager.status, 'installing')
+            self.assertTrue(messages)
+
+    async def test_failed_installation_is_not_retried_in_an_endless_restart_loop(self):
+        import threading
+        selected = updates.select_release(release('v2099.1.1.1'), 'example/XAnty', '2026.11.22.2')
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('xgenius.updates.application_home', return_value=Path(directory)), \
+                patch('xgenius.updates.read_update_config', return_value={'repository': 'example/XAnty'}), \
+                patch('xgenius.updates.supports_install', return_value=True), \
+                patch('xgenius.updates.fetch_release', return_value=selected), \
+                patch('xgenius.updates.download_release') as download:
+            manager = updates.UpdateManager()
+            manager.root.mkdir(parents=True)
+            (manager.root / 'result.json').write_text(json.dumps({'ok': False, 'version': selected['version']}))
+            self.assertFalse(await manager.update_on_startup(threading.Event(), lambda message: None))
+            download.assert_not_called()
+
+    async def test_offline_or_closing_startup_keeps_the_existing_application(self):
+        import threading
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('xgenius.updates.application_home', return_value=Path(directory)), \
+                patch('xgenius.updates.read_update_config', return_value={'repository': 'example/XAnty'}), \
+                patch('xgenius.updates.supports_install', return_value=True), \
+                patch('xgenius.updates.fetch_release', side_effect=updates.UpdateError('Offline')) as fetch, \
+                patch.object(updates.UpdateManager, '_launch_helper') as install:
+            manager = updates.UpdateManager()
+            self.assertFalse(await manager.update_on_startup(threading.Event(), lambda message: None))
+            self.assertEqual(manager.status, 'error')
+            closing = threading.Event()
+            closing.set()
+            self.assertFalse(await manager.update_on_startup(closing, lambda message: None))
+            self.assertEqual(fetch.call_count, 1)
+            install.assert_not_called()
+
+    async def test_closing_during_download_cannot_launch_installer(self):
+        import threading
+        closing = threading.Event()
+        selected = updates.select_release(release('v2099.1.1.1'), 'example/XAnty', '2026.11.22.2')
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('xgenius.updates.application_home', return_value=Path(directory)), \
+                patch('xgenius.updates.read_update_config', return_value={'repository': 'example/XAnty'}), \
+                patch('xgenius.updates.supports_install', return_value=True), \
+                patch('xgenius.updates.fetch_release', return_value=selected), \
+                patch('xgenius.updates.download_release', side_effect=lambda *args: closing.set()), \
+                patch.object(updates.UpdateManager, '_launch_helper') as install:
+            manager = updates.UpdateManager()
+            self.assertFalse(await manager.update_on_startup(closing, lambda message: None))
+            install.assert_not_called()
+
     async def test_download_cannot_start_while_checking_a_newer_release(self):
         import asyncio
         import threading
@@ -134,6 +202,39 @@ class UpdateGuardTests(unittest.IsolatedAsyncioTestCase):
 
 @unittest.skipUnless(os.name == 'nt', 'Windows PowerShell helper')
 class UpdateHelperTests(unittest.TestCase):
+    def test_new_process_must_acknowledge_startup_or_the_helper_rolls_back(self):
+        helper_source = Path(updates.__file__).with_name('update_helper.ps1')
+        for healthy in (True, False):
+            with self.subTest(healthy=healthy), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                target, source, health = root/'XAnty.exe', root/'new.exe', root/'health.json'
+                target.write_bytes(b'MZold')
+                source.write_bytes(b'MZnew')
+                helper = root/'helper.ps1'
+                shutil.copyfile(helper_source, helper)
+                manifest = root/'plan.json'
+                manifest.write_text(json.dumps({'pid': 987654321, 'target': str(target), 'source': str(source),
+                    'sha256': hashlib.sha256(b'MZnew').hexdigest(), 'version': '99.0',
+                    'health': str(health), 'result': str(root/'result.json')}))
+                quote = lambda p: "'" + str(p).replace("'", "''") + "'"
+                acknowledgement = ("'{\"version\":\"99.0\"}' | Set-Content -LiteralPath " + quote(health)) if healthy else ''
+                wrapper = root/'run.ps1'
+                wrapper.write_text(f'''function Start-Process {{
+param($FilePath,$WorkingDirectory,$WindowStyle,[switch]$PassThru)
+if ($PassThru) {{
+  {acknowledgement}
+  return [pscustomobject]@{{HasExited=$true}}
+}}
+}}
+& {quote(helper)} -Manifest {quote(manifest)}
+''')
+                subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',
+                                '-File',str(wrapper)],check=True,capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
+                result = json.loads((root/'result.json').read_text(encoding='utf-8-sig'))
+                self.assertEqual(result['ok'], healthy, result)
+                self.assertEqual(target.read_bytes(), b'MZnew' if healthy else b'MZold')
+                self.assertFalse(health.exists())
+
     def test_atomic_replace_backup_and_rollback_use_only_test_files(self):
         helper_source = Path(updates.__file__).with_name('update_helper.ps1')
         for scenario in ('success', 'restart-failure', 'checksum-failure'):

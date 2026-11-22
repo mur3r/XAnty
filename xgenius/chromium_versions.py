@@ -341,7 +341,8 @@ class ChromiumVersionManager:
 
     def _paths(self, version):
         if version == 'bundled':
-            return self.base_dir / 'Bro/chrome.exe', self.base_dir / 'Drivers/chromedriver.exe'
+            from xgenius.config import get_paths_from_base
+            return get_paths_from_base(self.base_dir)
         root = self._safe(self.root / _version(version))
         return self._safe(root / 'chrome-win64/chrome.exe'), self._safe(root / 'chromedriver-win64/chromedriver.exe')
 

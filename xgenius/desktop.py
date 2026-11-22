@@ -1,6 +1,8 @@
 """Own the native window and the local HTTP server in one desktop process."""
 
 import asyncio
+import json
+import os
 import sys
 import threading
 import time
@@ -62,6 +64,22 @@ def run_desktop() -> None:
                 .replace('{{MODE}}', 'error' if error else 'loading'))
 
     bridge = DesktopApi()
+    if getattr(sys, 'frozen', False):
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateMutexW.restype = wintypes.HANDLE
+        # Presence is enough for Inno Setup; independent workspaces may still coexist.
+        state['installer_mutex'] = kernel.CreateMutexW(None, False, 'Local\\XAnty.App.Running')
+
+    def startup_status(message):
+        from html import escape
+        page = loading_page().replace('Загружаем профили и настройки…', escape(message))
+        bridge._window.html = page
+        try:
+            bridge._window.evaluate_js('document.getElementById("startup-status").textContent=' + json.dumps(message))
+        except Exception:
+            pass
 
     def run_server():
         loop = asyncio.new_event_loop()
@@ -69,6 +87,24 @@ def run_desktop() -> None:
         app = None
         state["loop"] = loop
         try:
+            if getattr(sys, 'frozen', False):
+                from xgenius.updates import UpdateManager
+                updater = UpdateManager()
+                state['startup_updater'] = updater
+                record('update_check_started')
+                restarting = loop.run_until_complete(updater.update_on_startup(closing, startup_status))
+                record('update_check_finished ' + updater.status)
+                if restarting:
+                    bridge.close()
+                    return
+                if closing.is_set():
+                    return
+                startup_status('Загружаем профили и настройки…')
+                from xgenius.config import default_base_dir, get_paths_from_base, read_saved_base_dir, save_base_dir
+                if read_saved_base_dir() is None:
+                    base = default_base_dir()
+                    if all(path.is_file() for path in get_paths_from_base(base)):
+                        save_base_dir(base)
             record('backend_import_started')
             from xgenius.web.server import WebApp
             if closing.is_set():
@@ -84,6 +120,13 @@ def run_desktop() -> None:
                     loop.create_task(app.shutdown())
                 else:
                     bridge._window.load_url(url)
+                    health = os.environ.pop('XANTY_UPDATE_HEALTH_FILE', '')
+                    if health:
+                        from xgenius import __version__
+                        try:
+                            Path(health).write_text(json.dumps({'version': __version__, 'pid': os.getpid()}), encoding='utf-8')
+                        except OSError:
+                            pass
 
             loop.run_until_complete(app.run_forever(on_ready=signal_ready, host="127.0.0.1",
                                                      port=0, launch_browser=False))
@@ -99,6 +142,9 @@ def run_desktop() -> None:
                 except Exception:
                     pass
         finally:
+            updater = state.get('startup_updater')
+            if updater is not None:
+                loop.run_until_complete(updater.shutdown())
             if app is not None and not app._stop.is_set():
                 try:
                     loop.run_until_complete(app.shutdown())

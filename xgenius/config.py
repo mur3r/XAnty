@@ -57,6 +57,11 @@ def save_base_dir(base_dir: Path) -> None:
 def get_paths_from_base(base_folder: Path) -> Tuple[Path, Path]:
     chrome_path = base_folder / "Bro" / "chrome.exe"
     chromedriver_path = base_folder / "Drivers" / "chromedriver.exe"
+    if getattr(sys, 'frozen', False) and not chrome_path.exists() and not chromedriver_path.exists():
+        runtime = Path(sys.executable).resolve().parent / 'runtime'
+        installed = runtime / 'Bro/chrome.exe', runtime / 'Drivers/chromedriver.exe'
+        if all(path.is_file() for path in installed):
+            return installed
     return chrome_path, chromedriver_path
 
 

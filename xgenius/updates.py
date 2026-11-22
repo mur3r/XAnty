@@ -1,4 +1,4 @@
-"""Opt-in GitHub Releases updates for the Windows onefile application."""
+"""Verified GitHub Releases updates for the Windows onefile application."""
 from __future__ import annotations
 
 import asyncio
@@ -204,6 +204,41 @@ class UpdateManager:
             self._check_task = asyncio.create_task(self._check())
         return await asyncio.shield(self._check_task)
 
+    async def update_on_startup(self, closing, progress):
+        """Finish updating before the workspace starts; return True when exiting."""
+        if not supports_install() or not self.config['repository'] or closing.is_set():
+            return False
+        self._cancel_download = closing
+        try:
+            progress('Проверяем обновления…')
+            # A launch always checks GitHub, regardless of the background check cache.
+            await self.check()
+            if closing.is_set() or self.status != 'available':
+                return False
+            previous = self.snapshot().get('install_result') or {}
+            if not isinstance(previous, dict):
+                previous = {}
+            if previous.get('ok') is False and previous.get('version') == self.release['version']:
+                progress('Предыдущее обновление не установилось. Запускаем сохранённую версию…')
+                return False
+            progress('Скачиваем обновление ' + self.release['version'] + '…')
+            self.start_download()
+            while self._download_task and not self._download_task.done():
+                await asyncio.sleep(0.15)
+                if not closing.is_set() and self.release['size']:
+                    percent = min(100, self.downloaded * 100 // self.release['size'])
+                    progress(f'Скачиваем обновление {self.release["version"]}: {percent}%')
+            if self._download_task:
+                await self._download_task
+            if closing.is_set() or self.status != 'ready':
+                return False
+            progress('Устанавливаем обновление. XAnty сейчас перезапустится…')
+            await self.install()
+            return True
+        except (UpdateError, OSError):
+            # Offline or failed downloads must never lock the user out of the app.
+            return False
+
     async def _check(self):
         self.status, self.error = 'checking', ''
         try:
@@ -286,6 +321,7 @@ class UpdateManager:
         manifest = helper.with_suffix('.json')
         manifest.write_text(json.dumps({'pid': os.getpid(), 'target': str(target), 'source': str(self.path.resolve()),
                                         'sha256': self.release['sha256'], 'version': self.release['version'],
+                                        'health': str(helper.with_suffix('.health.json')),
                                         'result': str((self.root / 'result.json').resolve())}), encoding='utf-8')
         powershell = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
         subprocess.Popen([str(powershell), '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',

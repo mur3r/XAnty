@@ -1,15 +1,25 @@
-name: Build Windows release
+name: Build and publish Windows update
 
 on:
   push:
-    tags: ['v[0-9]*']
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: xanty-public-release
+  cancel-in-progress: false
+
 jobs:
   windows:
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -21,34 +31,80 @@ jobs:
           package-manager-cache: false
       - name: Install build dependencies
         run: python -m pip install -r requirements.txt -r requirements-build.txt
-      - name: Check release version and configure repository
-        shell: pwsh
-        run: |
-          @'
-          import json, os
-          from pathlib import Path
-          from xgenius import __version__
-          tag = os.environ['GITHUB_REF_NAME']
-          if tag != 'v' + __version__:
-              raise SystemExit('Git tag must match xgenius.__version__')
-          config = {'repository': os.environ['GITHUB_REPOSITORY'], 'asset': 'XAnty.exe'}
-          Path('xgenius/update_config.json').write_text(json.dumps(config, indent=2), encoding='utf-8')
-          '@ | python -
       - name: Test
-        shell: pwsh
         run: |
           python -m unittest discover -s tests -q
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/test_profile_ui.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          node --check xgenius/web/static/app.js
+          node --test tests/profile_management_ui.test.js tests/workspace_operations_ui.test.js
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          node --check xgenius/web/static/updates.js
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Get-ChildItem xgenius/web/static/*.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE) { throw 'Invalid JavaScript' } }
           python -m compileall -q xgenius tools
-      - name: Build onefile EXE
-        run: python tools/build_windows.py --onefile --dist-dir dist/release
-      - name: Create draft release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Assign release version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$env:GITHUB_REF_NAME" dist/release/XAnty.exe --draft --verify-tag --generate-notes
+        run: python tools/prepare_release.py
+      - name: Build onefile EXE
+        run: python tools/build_windows.py --onefile --dist-dir dist/release
+      - name: Install installer compiler
+        run: |
+          if (-not (Test-Path 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe')) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+      - name: Build installer with official browser and WebView2 bootstrapper
+        run: python tools/build_installer.py
+      - name: Verify clean installation and removal
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP 'xanty-installer-smoke'
+          $setup = (Resolve-Path dist/release/XAnty-Setup.exe).Path
+          $process = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS',"/DIR=`"$testRoot`"") -WindowStyle Hidden -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          foreach ($relative in @('XAnty.exe','runtime/Bro/chrome.exe','runtime/Drivers/chromedriver.exe','unins000.exe')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $testRoot $relative))) { throw "Missing installed file: $relative" }
+          }
+          python tools/smoke_desktop.py --exe (Join-Path $testRoot 'XAnty.exe') --version '${{ steps.version.outputs.version }}'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $uninstall = Start-Process -FilePath (Join-Path $testRoot 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0) { throw 'Uninstaller failed' }
+      - name: Publish complete verified update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $head = gh api "repos/$env:GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ($head -ne $env:GITHUB_SHA) { Write-Host 'A newer commit is queued; skipping this outdated build.'; exit 0 }
+          $assets = @('dist/release/XAnty.exe','dist/release/XAnty-Setup.exe')
+          $lines = foreach ($asset in $assets) { (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLower() + '  ' + (Split-Path $asset -Leaf) }
+          $lines | Set-Content -LiteralPath dist/release/SHA256SUMS.txt -Encoding ascii
+          gh release create $env:RELEASE_TAG @assets dist/release/SHA256SUMS.txt --draft --target $env:GITHUB_SHA --title "XAnty $($env:RELEASE_TAG.TrimStart('v'))" --generate-notes
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($asset in $assets) {
+            $name = Split-Path $asset -Leaf
+            $remote = @($release.assets | Where-Object name -eq $name)
+            $digest = 'sha256:' + (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLower()
+            if ($remote.Count -ne 1 -or $remote[0].digest -ne $digest -or $remote[0].size -ne (Get-Item -LiteralPath $asset).Length) { throw "Release asset verification failed: $name" }
+          }
+          gh release edit $env:RELEASE_TAG --draft=false --latest
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify actual startup update from the published EXE
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $head = gh api "repos/$env:GITHUB_REPOSITORY/branches/main" --jq '.commit.sha'
+          if ($head -ne $env:GITHUB_SHA) { exit 0 }
+          $source = Get-Content -LiteralPath xgenius/__init__.py -Raw -Encoding UTF8
+          $source = $source -replace '__version__ = "[^"]+"', '__version__ = "1.0.0.0"'
+          Set-Content -LiteralPath xgenius/__init__.py -Value $source -Encoding UTF8
+          python tools/build_windows.py --onefile --dist-dir dist/update-probe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $digest = (Get-FileHash -LiteralPath dist/release/XAnty.exe -Algorithm SHA256).Hash.ToLower()
+          python tools/smoke_desktop.py --exe dist/update-probe/XAnty.exe --version $env:RELEASE_VERSION --sha256 $digest
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

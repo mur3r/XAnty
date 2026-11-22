@@ -17,6 +17,30 @@ spec.loader.exec_module(desktop)
 
 
 class DesktopLifecycleTests(unittest.TestCase):
+    def test_startup_update_restarts_before_any_workspace_is_loaded(self):
+        from unittest.mock import AsyncMock, Mock
+        from xgenius import updates
+        with tempfile.TemporaryDirectory() as directory:
+            finished = threading.Event()
+            window = Mock()
+            window.destroy.side_effect = finished.set
+            updater = types.SimpleNamespace(status='installing', update_on_startup=AsyncMock(return_value=True), shutdown=AsyncMock())
+            backend = Mock(side_effect=AssertionError('Workspace started before replacement'))
+            def start(func, **kwargs):
+                func()
+                self.assertTrue(finished.wait(3))
+            modules = {
+                'webview': types.SimpleNamespace(create_window=lambda *a, **kw: window, start=start),
+                'xgenius.config': types.SimpleNamespace(application_home=lambda: Path(directory)),
+                'xgenius.web.server': types.SimpleNamespace(WebApp=backend),
+            }
+            with patch.dict(sys.modules, modules), patch.object(sys, 'frozen', True, create=True), \
+                    patch('ctypes.WinDLL', return_value=Mock()), patch.object(updates, 'UpdateManager', return_value=updater):
+                desktop.run_desktop()
+            updater.update_on_startup.assert_awaited_once()
+            backend.assert_not_called()
+            window.load_url.assert_not_called()
+
     def test_javascript_bridge_does_not_walk_native_window_properties(self):
         from webview.util import inject_pywebview
         from unittest.mock import Mock
