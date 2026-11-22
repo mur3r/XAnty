@@ -45,7 +45,10 @@ def webview_bootstrapper(destination):
     script = ("$s=Get-AuthenticodeSignature -LiteralPath " + quoted + "; "
               "if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notlike '*O=Microsoft Corporation*') "
               "{ throw 'WebView2 bootstrapper signature verification failed' }")
-    subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script], check=True)
+    shell = shutil.which('pwsh.exe') or 'powershell.exe'
+    environment = dict(os.environ)
+    environment.pop('PSModulePath', None)
+    subprocess.run([shell, '-NoProfile', '-NonInteractive', '-Command', script], check=True, env=environment)
     return destination
 
 
