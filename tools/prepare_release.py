@@ -8,7 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from xgenius import __version__
-from xgenius.updates import version_tuple
+from xgenius.updates import UpdateError, version_tuple
 
 
 def next_version(source, latest=None):
@@ -36,7 +36,22 @@ def prepare():
             latest = None
         else:
             response.raise_for_status()
-            latest = response.json()['tag_name']
+            release = response.json()
+            latest = release['tag_name']
+            # Recover a release published with GitHub's temporary draft tag.
+            if latest.startswith('untagged-') and release.get('name', '').startswith('XAnty '):
+                intended = release['name'][len('XAnty '):]
+                version_tuple(intended)
+                names = {asset['name'] for asset in release.get('assets', [])}
+                if not {'XAnty.exe', 'XAnty-Setup.exe'}.issubset(names):
+                    raise UpdateError('The previous release is incomplete.')
+                repaired = session.patch(f'https://api.github.com/repos/{repository}/releases/{release["id"]}',
+                    json={'tag_name': 'v' + intended, 'target_commitish': release['target_commitish'],
+                          'draft': False, 'make_latest': 'true'}, timeout=(10, 30))
+                repaired.raise_for_status()
+                latest = repaired.json()['tag_name']
+                if latest != 'v' + intended:
+                    raise UpdateError('The previous release tag could not be restored.')
     version = next_version(__version__, latest)
     path = ROOT / 'xgenius/__init__.py'
     stamped, count = re.subn(r'^__version__ = "[^\"]+"', '__version__ = "' + version + '"', path.read_text(encoding='utf-8'), flags=re.M)

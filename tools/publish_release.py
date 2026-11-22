@@ -44,7 +44,7 @@ def publish():
             raise RuntimeError('This version is already published; use a newer build version.')
         if matches:
             release = matches[0]
-            release = api('PATCH', '/releases/' + str(release['id']), json={'target_commitish': commit})
+            release = api('PATCH', '/releases/' + str(release['id']), json={'tag_name': tag, 'target_commitish': commit, 'draft': True})
         else:
             release = api('POST', '/releases', json={'tag_name': tag, 'target_commitish': commit,
                           'name': 'XAnty ' + __version__, 'draft': True, 'generate_release_notes': True,
@@ -63,7 +63,8 @@ def publish():
             if (asset.get('name') != path.name or asset.get('size') != path.stat().st_size
                     or asset.get('digest') != 'sha256:' + digest):
                 raise RuntimeError('Release asset verification failed: ' + path.name)
-        published = api('PATCH', '/releases/' + str(release_id), json={'draft': False, 'make_latest': 'true'})
+        published = api('PATCH', '/releases/' + str(release_id), json={'tag_name': tag, 'target_commitish': commit,
+                        'draft': False, 'make_latest': 'true'})
         if published['draft'] or published['tag_name'] != tag:
             raise RuntimeError('Release publication could not be verified.')
         print('Published verified release:', published['html_url'])
