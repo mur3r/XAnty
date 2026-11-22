@@ -17,13 +17,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 35
-    env:
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
     defaults:
       run:
         shell: pwsh
     steps:
+      - name: Normalize temporary paths
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "TMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
