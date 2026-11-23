@@ -1,6 +1,24 @@
 'use strict';
 const I18N = (() => {
   const rows = `
+rotation_invalid|Введите корректную ссылку ротации с http:// или https://.|Enter a valid http:// or https:// rotation link.|Введіть коректне посилання ротації з http:// або https://.
+rotation_missing|Добавьте ссылку ротации в настройках профиля.|Add a rotation link in the profile settings.|Додайте посилання ротації в налаштуваннях профілю.
+rotation_busy|Ротация по этой ссылке уже выполняется. Дождитесь её завершения.|This link is already being used for rotation. Wait until it finishes.|Ротація за цим посиланням уже виконується. Дочекайтеся завершення.
+rotation_wait_profile|Дождитесь завершения текущих операций с профилем перед сменой IP.|Wait for the current profile operations before rotating the IP.|Дочекайтеся завершення поточних операцій із профілем перед зміною IP.
+rotation_settings_changed|Настройки прокси изменились во время ротации. Проверьте текущий IP.|Proxy settings changed during rotation. Check the current IP.|Налаштування проксі змінилися під час ротації. Перевірте поточний IP.
+rotation_rate_limited|Слишком частая смена IP. Подождите и повторите попытку.|IP rotation is rate limited. Wait and try again.|Занадто часта зміна IP. Зачекайте та повторіть спробу.
+rotation_rejected|Провайдер отклонил ротацию. Проверьте ссылку и ограничения смены IP.|The provider rejected rotation. Check the link and rotation limits.|Провайдер відхилив ротацію. Перевірте посилання та обмеження зміни IP.
+rotation_timeout|Время ожидания ротации истекло. Запрос мог дойти до провайдера; проверьте IP перед повторной ротацией.|Rotation timed out. The request may have reached the provider; check the IP before trying again.|Час очікування ротації минув. Запит міг дійти до провайдера; перевірте IP перед повторною ротацією.
+rotation_unreachable|Не удалось отправить запрос на ротацию. Проверьте ссылку и подключение.|Cannot send the rotation request. Check the link and connection.|Не вдалося надіслати запит на ротацію. Перевірте посилання та з’єднання.
+rotation_http|Провайдер ротации вернул HTTP {code}. Проверьте ссылку и ограничения смены IP.|Rotation provider returned HTTP {code}. Check the link and limits.|Провайдер ротації повернув HTTP {code}. Перевірте посилання та обмеження зміни IP.
+proxy_rotation_url|Ссылка ротации прокси|Proxy rotation URL|Посилання ротації проксі
+proxy_rotation_hint|Вставьте ссылку смены IP от провайдера прокси. Для ротации нажмите «Сменить IP» рядом с прокси.|Paste your provider's IP rotation link. Use Rotate IP next to the proxy to send the request.|Вставте посилання зміни IP від провайдера проксі. Для ротації натисніть «Змінити IP» біля проксі.
+proxy_rotate|Сменить IP|Rotate IP|Змінити IP
+proxy_rotating|Меняем IP…|Rotating IP…|Змінюємо IP…
+proxy_rotation_changed|IP прокси изменён: {ip}|Proxy IP changed: {ip}|IP проксі змінено: {ip}
+proxy_rotation_checked|Запрос на ротацию отправлен. Текущий IP: {ip}|Rotation requested. Current IP: {ip}|Запит на ротацію надіслано. Поточний IP: {ip}
+proxy_rotation_unchanged|Запрос принят, но IP пока прежний: {ip}. Проверьте его немного позже.|Request accepted, but IP is still {ip}. Check it again shortly.|Запит прийнято, але IP поки попередній: {ip}. Перевірте його трохи пізніше.
+proxy_rotation_pending|Запрос на ротацию отправлен, но проверить IP пока не удалось. Повторите проверку прокси немного позже.|Rotation requested, but the IP could not be checked yet. Check the proxy again shortly.|Запит на ротацію надіслано, але перевірити IP поки не вдалося. Перевірте проксі трохи пізніше.
 whats_new|Что нового|What's new|Що нового
 release_notes_title|Что нового в XAnty|What's new in XAnty|Що нового в XAnty
 release_notes_intro|Посмотрите, что изменилось в этой версии. Список можно прокручивать.|See what changed in this version. Scroll to read more.|Перегляньте зміни в цій версії. Список можна прокручувати.
@@ -405,6 +423,15 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   }
   const errors = {'Profile is already open in another session. Close it before continuing.':'profile_already_open','Закройте выбранные профили и дождитесь завершения операций перед удалением в корзину.':'close_before_trash','Профиль с этим именем находится в корзине. Сначала восстановите или удалите его окончательно.':'reserved_in_trash','Another transfer operation is running': 'transfer_busy', 'Profile transfer is running; wait for it to finish': 'transfer_busy', 'Close the selected profiles before exporting': 'close_before_export', 'Enter a Dolphin API token': 'token_required', 'Invalid or expired Dolphin API token': 'invalid_token', 'Cannot connect to the Dolphin API': 'api_unavailable', 'No profiles to export': 'no_profiles_export', 'No saved cookies for this profile': 'cookies_missing', 'Close this profile before importing cookies': 'close_before_cookies', 'Operation cancelled': 'cancelled'};
   Object.assign(errors, {
+    'Enter an HTTP or HTTPS proxy rotation link.':'rotation_invalid',
+    'Add a proxy rotation link in the profile settings first.':'rotation_missing',
+    'This proxy rotation link is already in use. Wait for the current rotation to finish.':'rotation_busy',
+    'Wait for current profile operations before rotating the proxy.':'rotation_wait_profile',
+    'Proxy settings changed during rotation. Check the current IP.':'rotation_settings_changed',
+    'Proxy rotation is rate limited. Wait and try again.':'rotation_rate_limited',
+    'The proxy provider rejected the rotation request. Check the link and provider limits.':'rotation_rejected',
+    'Proxy rotation timed out. The provider may have received the request; check the IP before trying again.':'rotation_timeout',
+    'Cannot reach the proxy rotation endpoint. Check the link and connection.':'rotation_unreachable',
     'Dolphin requires a paid plan for this operation':'paid_plan',
     'Proxy location is unavailable. The proxy IP check succeeded.':'proxy_geo_failed',
     'Proxy changed during the check. Please check it again.':'proxy_changed',
@@ -451,6 +478,8 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   });
   function error(value) {
     const text=String(value);
+    const rotationHttp=text.match(/^Proxy rotation returned HTTP (\d+)\./);
+    if(rotationHttp)return t('rotation_http',{code:rotationHttp[1]});
     if(text.startsWith('Ошибка входа: '))return error(text.slice(14));
     if(errors[text]) return t(errors[text]);
     if(text.startsWith('Cookies unavailable: '))return t('cookie_export_unavailable',{reason:error(text.slice(21))});

@@ -153,6 +153,8 @@ class Engine:
                 "group": acc.get("group", "") or "",
                 "proxy": self.proxy_label(acc.get("proxy", "")),
                 "proxy_status": st.proxy_status if st else "",
+                "has_proxy_rotation": bool(acc.get('proxy_rotation_url')),
+                "proxy_rotating": getattr(st, 'proxy_rotating', False) if st else False,
                 "proxy_ip": st.proxy_ip if st else "",
                 "proxy_error": st.proxy_error if st else "",
                 "proxy_location": getattr(st, 'proxy_location', {}) if st else {},

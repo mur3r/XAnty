@@ -19,7 +19,8 @@ TRACKED = ('username', 'profile_name', 'notes', 'tags', 'group', 'proxy', 'passw
 TRACKED += ('restore_tabs','extension_set','icon_text')
 TRACKED += ('important','reminder_at','reminder_note')
 TRACKED += ('block_images','block_media','block_fonts','phishing_protection')
-SECRET_FIELDS = {'password', 'auth_token', 'ct0_token'}
+TRACKED += ('proxy_rotation_url',)
+SECRET_FIELDS = {'password', 'auth_token', 'ct0_token', 'proxy_rotation_url'}
 
 
 def now_iso():

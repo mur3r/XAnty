@@ -16,6 +16,7 @@ from xgenius.folders import FolderError, folder_name
 from xgenius.auto_login_policy import apply_auto_login, is_auto_login_enabled
 from xgenius.process_utils import hard_close_browser, kill_orphan_chrome
 from xgenius.proxy_service import ProxyCheckError, check_proxy, lookup_proxy_location, parse_proxy
+from xgenius.proxy_rotation import ProxyRotationError, request_rotation, rotation_url
 from xgenius.error_messages import safe_launch_error
 from xgenius.profile_settings import ProfileSettingsError, browser_settings, workspace_settings
 from xgenius.preferences import read_preferences
@@ -62,6 +63,8 @@ class Actions:
         self._closing: set = set()
         self._transferring: set = set()
         self._proxy_checks = {}
+        self._proxy_rotations = {}
+        self._rotating_urls = set()
         self._launch_tasks = set()
         self._profile_operations = set()
         self._closing_futures = set()
@@ -77,6 +80,9 @@ class Actions:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks,return_exceptions=True)
+        if self._proxy_rotations:
+            await asyncio.gather(*(asyncio.shield(task) for task in list(self._proxy_rotations.values())),
+                                 return_exceptions=True)
         manager = getattr(self.am,'browser_manager',None)
         if manager is not None:
             await manager.shutdown()
@@ -220,6 +226,85 @@ class Actions:
         self._log(f"Folder removed: {name}; {moved} profile(s) left unfiled")
         self.e.notify()
         return moved
+
+    async def rotate_account_proxy(self, username: str) -> dict:
+        if self._stopping:
+            raise ActionError('Application is shutting down')
+        task = self._proxy_rotations.get(username)
+        if task is None or task.done():
+            task = self._proxy_rotations[username] = asyncio.create_task(self._rotate_account_proxy(username))
+        try:
+            return await asyncio.shield(task)
+        finally:
+            if task.done() and self._proxy_rotations.get(username) is task:
+                self._proxy_rotations.pop(username, None)
+
+    async def _rotate_account_proxy(self, username: str) -> dict:
+        account = self._account(username)
+        if account is None:
+            raise ActionError('Account not found')
+        try:
+            parse_proxy(account.get('proxy'))
+            url = rotation_url(account.get('proxy_rotation_url'))
+        except (ProxyCheckError, ProxyRotationError) as exc:
+            raise ActionError(str(exc)) from None
+        if not url:
+            raise ActionError('Add a proxy rotation link in the profile settings first.')
+        if url in self._rotating_urls:
+            raise ActionError('This proxy rotation link is already in use. Wait for the current rotation to finish.')
+        if self.am._session_is_busy(username):
+            raise ActionError('Wait for current profile operations before rotating the proxy.')
+        self._rotating_urls.add(url)
+        self._profile_operations.add(username)
+        state = self.am.accounts.setdefault(username, AccountState(username=username))
+        state.proxy_rotating = True
+        self.e.notify()
+        requested = False
+
+        def unchanged():
+            current = self._account(username) or {}
+            return (self._state(username) is state and current.get('proxy') == account.get('proxy')
+                    and current.get('proxy_rotation_url') == account.get('proxy_rotation_url'))
+
+        try:
+            checking = self._proxy_checks.get(username)
+            if checking and not checking.done():
+                await asyncio.shield(checking)
+            if not unchanged():
+                raise ActionError('Proxy settings changed during rotation. Check the current IP.')
+            previous_ip = state.proxy_ip
+            state.proxy_status = ''
+            state.proxy_ip = ''
+            state.proxy_error = ''
+            state.proxy_location = {}
+            state.proxy_location_error = ''
+            await self._run_profile_worker(request_rotation, url)
+            requested = True
+            if not unchanged():
+                raise ActionError('Proxy settings changed during rotation. Check the current IP.')
+            result = {}
+            for attempt in range(3):
+                if attempt:
+                    await asyncio.sleep(2)
+                if not unchanged():
+                    raise ActionError('Proxy settings changed during rotation. Check the current IP.')
+                result = await self.check_account_proxy(username)
+                if result.get('ok') and (not previous_ip or result.get('ip') != previous_ip):
+                    break
+            if not unchanged():
+                raise ActionError('Proxy settings changed during rotation. Check the current IP.')
+            self._log('Proxy rotation requested; external IP rechecked', username)
+            return {'ok': True, 'requested': True, 'ip': result.get('ip', ''),
+                    'changed': result.get('ip') != previous_ip if result.get('ok') and previous_ip else None,
+                    'check_error': result.get('error', '')}
+        except ProxyRotationError as exc:
+            self._log('Proxy rotation request did not complete', username, 'error')
+            return {'ok': False, 'requested': requested, 'error': str(exc)}
+        finally:
+            state.proxy_rotating = False
+            self._profile_operations.discard(username)
+            self._rotating_urls.discard(url)
+            self.e.notify()
 
     async def check_account_proxy(self, username: str) -> dict:
         task = self._proxy_checks.get(username)
@@ -617,6 +702,7 @@ class Actions:
             "notes": str(data.get("notes") or ""),
             "password": password,
             "proxy": (data.get("proxy") or "").strip(),
+            "proxy_rotation_url": rotation_url(data.get('proxy_rotation_url')),
             "user_agent": (data.get("user_agent") or "").strip(),
             "group": (data.get("group") or "").strip(),
             "auth_token": auth_token,
@@ -874,6 +960,7 @@ class Actions:
             metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note', 'icon_text') if k in data})
         except ProfileSettingsError as exc:
             raise ActionError(str(exc)) from exc
+        saved_rotation_url = rotation_url(data.get('proxy_rotation_url', previous.get('proxy_rotation_url')))
         moves = []
         if new_username != original:
             if self.am._session_is_busy(original) or (self._state(original) and self._state(original).browser):
@@ -899,6 +986,7 @@ class Actions:
                 a["username"] = new_username
                 a["password"] = data.get("password", a.get("password", ""))
                 a["proxy"] = (data.get("proxy") or "").strip()
+                a['proxy_rotation_url'] = saved_rotation_url
                 # Keep old data for compatibility; Chrome now supplies its own UA.
                 a["user_agent"] = a.get("user_agent", "")
                 a.update(settings)

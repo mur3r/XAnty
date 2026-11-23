@@ -259,7 +259,7 @@ def _read_manifest(archive: ZipFile, cancelled=None) -> tuple[dict, dict]:
         workspace_settings(account)
         if type(account.get('auto_login', False)) is not bool:
             raise ArchiveError('Invalid automatic sign-in setting in package')
-        for name in ('password', 'proxy', 'auth_token', 'ct0_token'):
+        for name in ('password', 'proxy', 'auth_token', 'ct0_token', 'proxy_rotation_url'):
             if not isinstance(account.get(name, ''), (str, type(None))):
                 raise ArchiveError('Invalid profile settings in package')
     allowed = {'manifest.json'}

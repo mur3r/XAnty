@@ -23,6 +23,7 @@ class SafeExportTests(unittest.TestCase):
         self.account = {
             'username': 'alice', 'password': self.secret, 'auth_token': self.secret,
             'ct0_token': self.secret, 'proxy': 'http://user:' + self.secret + '@proxy.test:80',
+            'proxy_rotation_url': 'https://provider.example/rotate?key=' + self.secret,
             'user_agent': 'https://example.com/?token=' + self.secret,
             'notes': self.secret, 'tags': [self.secret], 'group': self.secret,
             'profile_name': self.secret, 'auto_login': True,
