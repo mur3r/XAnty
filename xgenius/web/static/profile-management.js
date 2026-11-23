@@ -21,10 +21,12 @@ const ProfileUI = (() => {
     return Math.max(0,Number(a.runtime_seconds)||0)+(Number.isFinite(extra)?extra:0);
   }
   const date=value=>value&&value!=='N/A'&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleString(I18N.language==='uk'?'uk-UA':I18N.language==='ru'?'ru-RU':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
-  function runtimeHTML(a){return `<span data-runtime>${new Intl.NumberFormat(I18N.language,{minimumFractionDigits:2,maximumFractionDigits:2}).format(runtimeSeconds(a)/3600)} ${t('hours_short')}</span>${a.has_browser?'<i class="runtime-live"></i>':''}`;}
+  const numberFormats=new Map();
+  function runtimeNumber(value){const lang=I18N.language;if(!numberFormats.has(lang))numberFormats.set(lang,new Intl.NumberFormat(lang,{minimumFractionDigits:2,maximumFractionDigits:2}));return numberFormats.get(lang).format(value);}
+  function runtimeHTML(a){return `<span data-runtime>${runtimeNumber(runtimeSeconds(a)/3600)} ${t('hours_short')}</span>${a.has_browser?'<i class="runtime-live"></i>':''}`;}
   function tick(){
     const rows=new Map(accounts().map(a=>[a.username,a]));
-    $$('#rows [data-runtime]').forEach(el=>{const a=rows.get(el.closest('[data-u]').dataset.u);if(a)el.textContent=new Intl.NumberFormat(I18N.language,{minimumFractionDigits:2,maximumFractionDigits:2}).format(runtimeSeconds(a)/3600)+' '+t('hours_short');});
+    $$('#rows [data-runtime]').forEach(el=>{const a=rows.get(el.closest('[data-u]').dataset.u);if(a)el.textContent=runtimeNumber(runtimeSeconds(a)/3600)+' '+t('hours_short');});
   }
   function applyColumns(){
     const visible=columns(),order=[...visible,...allColumns.filter(c=>!visible.includes(c))];

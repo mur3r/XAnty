@@ -1,6 +1,23 @@
 'use strict';
 const I18N = (() => {
   const rows = `
+profiles_retry|Повторить|Try again|Повторити
+profiles_sort|Сортировка профилей|Profile order|Сортування профілів
+profiles_sort_favorites|Избранные сверху|Favorites first|Обрані зверху
+profiles_sort_number|По номеру|By number|За номером
+profiles_sort_name|По названию|By name|За назвою
+profiles_sort_recent|Недавно запускались|Recently launched|Нещодавно запущені
+profiles_result_count|{n} из {total} профилей|{n} of {total} profiles|{n} із {total} профілів
+profiles_page|Страница|Page|Сторінка
+profiles_page_jump|Перейти на страницу|Go to page|Перейти на сторінку
+profiles_loading|Обновляем список профилей…|Refreshing profiles…|Оновлюємо список профілів…
+profiles_load_error|Не удалось обновить список. Показаны последние данные.|Could not refresh. Showing the last available data.|Не вдалося оновити список. Показано останні дані.
+profiles_no_matches_hint|Попробуйте другое имя, тег или сбросьте фильтры.|Try another name, tag, or reset the filters.|Спробуйте іншу назву, тег або скиньте фільтри.
+profiles_folder_empty|В этой папке пока нет профилей|This folder has no profiles yet|У цій папці поки немає профілів
+profiles_folder_empty_hint|Добавьте профиль или переместите существующие через массовые действия.|Add a profile or move existing profiles using bulk actions.|Додайте профіль або перемістіть наявні через масові дії.
+profiles_menu_manage|Управление|Manage|Керування
+profiles_menu_session|Прокси и сессия|Proxy and session|Проксі та сесія
+profiles_menu_profile|Файлы профиля|Profile files|Файли профілю
 rotation_invalid|Введите корректную ссылку ротации с http:// или https://.|Enter a valid http:// or https:// rotation link.|Введіть коректне посилання ротації з http:// або https://.
 rotation_missing|Добавьте ссылку ротации в настройках профиля.|Add a rotation link in the profile settings.|Додайте посилання ротації в налаштуваннях профілю.
 rotation_busy|Ротация по этой ссылке уже выполняется. Дождитесь её завершения.|This link is already being used for rotation. Wait until it finishes.|Ротація за цим посиланням уже виконується. Дочекайтеся завершення.

@@ -10,7 +10,7 @@ function environment(){
  const c=vm.createContext({console,Set,Map,Promise,document:{addEventListener(){}},setInterval(){},setTimeout(){},
   calls,messages,testRows:[{username:'alice',profile_name:'Work',proxy:'proxy.example:8080',has_proxy_rotation:true}],
   testApi:(method,path,body)=>{calls.push({method,path,body});return new Promise(resolve=>{finish=resolve;});}});
- for(const name of ['icons.js','i18n.js','profile-management.js','profile-tools.js','workspace-operations.js','app.js'])
+ for(const name of ['icons.js','i18n.js','profile-management.js','profiles-screen.js','profile-tools.js','workspace-operations.js','app.js'])
   vm.runInContext(fs.readFileSync('xgenius/web/static/'+name,'utf8'),c,{filename:name});
  vm.runInContext('api=testApi;renderTable=()=>{};refreshState=async()=>{};toast=(...args)=>messages.push(args);S.data={accounts:testRows};',c);
  return {c,calls,messages,run:code=>vm.runInContext(code,c),finish:result=>finish(result)};
