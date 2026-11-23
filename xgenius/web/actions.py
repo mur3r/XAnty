@@ -39,6 +39,10 @@ def _credentials(acc: dict) -> AccountCredentials:
     return AccountCredentials(
         username=acc["username"],
         password=acc.get("password", ""),
+        profile_name=acc.get('profile_name') or acc['username'],
+        profile_id=acc.get('profile_id',''),
+        profile_number=acc.get('profile_number'),
+        icon_text=acc.get('icon_text',''),
         proxy=acc.get("proxy"),
         user_agent=acc.get("user_agent"),
         headless=acc.get("headless", False),
@@ -47,7 +51,7 @@ def _credentials(acc: dict) -> AccountCredentials:
         ct0_token=acc.get("ct0_token"),
         auto_login=is_auto_login_enabled(acc),
         **settings,
-        **workspace_settings(acc), window_frame_enabled=read_preferences()['window_frames'],
+        **workspace_settings(acc),
     )
 
 
@@ -599,7 +603,7 @@ class Actions:
         try:
             settings = browser_settings(data)
             settings.update(workspace_settings({**data, 'username':username}))
-            metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note') if k in data})
+            metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note', 'icon_text') if k in data})
         except ProfileSettingsError as exc:
             raise ActionError(str(exc)) from exc
         acs = self.am.load_accounts()
@@ -867,7 +871,7 @@ class Actions:
         try:
             settings = browser_settings({**previous, **data})
             settings.update(workspace_settings({**previous,**data}))
-            metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note') if k in data})
+            metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note', 'icon_text') if k in data})
         except ProfileSettingsError as exc:
             raise ActionError(str(exc)) from exc
         moves = []

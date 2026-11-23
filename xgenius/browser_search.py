@@ -1,4 +1,8 @@
 """Repair the portable Chrome build's 'No Search' omnibox provider."""
+import json
+from pathlib import Path
+from xgenius.browser_cdp import background_target, CdpError
+from xgenius.browser_workspace import _atomic_json
 
 
 class SearchConfigurationError(RuntimeError):
@@ -56,13 +60,25 @@ const done = arguments[arguments.length - 1];
 """
 
 
-def ensure_search_engine(browser) -> dict:
-    """Use Chrome's settings API so the choice persists in existing profiles too."""
-    browser.get('chrome://settings/searchEngines')
+def ensure_search_engine(browser, profile_dir=None) -> dict:
+    """Repair once per Chrome major, without navigating or activating user tabs."""
+    major=str(browser.capabilities.get('browserVersion','')).split('.')[0]
+    marker=Path(profile_dir)/'.xanty-search.json' if profile_dir is not None else None
+    if marker is not None:
+        try:
+            cached=json.loads(marker.read_text(encoding='utf-8'))
+            if cached.get('version')==1 and cached.get('chrome_major')==major and cached.get('ok') is True:
+                return {'ok':True,'changed':False,'cached':True}
+        except (OSError,ValueError,AttributeError):pass
     try:
-        result = browser.execute_async_script(SEARCH_SETTINGS_SCRIPT)
+        expression='new Promise(resolve => { (function(){'+SEARCH_SETTINGS_SCRIPT+'}).call(null, resolve); })'
+        with background_target(browser,'chrome://settings/searchEngines',timeout=8) as target:
+            result=target.evaluate(expression,timeout=6)
     except Exception as exc:
         raise SearchConfigurationError('Could not configure Chrome search. Try opening the profile again.') from exc
     if not isinstance(result, dict) or not result.get('ok'):
         raise SearchConfigurationError('Could not configure Chrome search. Try opening the profile again.')
+    if marker is not None:
+        try:_atomic_json(marker,{'version':1,'chrome_major':major,'ok':True})
+        except OSError:pass
     return result

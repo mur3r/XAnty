@@ -1,8 +1,7 @@
 """Create Chrome with profile settings, local resource policy and proxy authentication."""
 
 import asyncio
-import json
-import tempfile
+import logging
 from pathlib import Path
 
 from selenium import webdriver
@@ -13,7 +12,8 @@ from selenium_stealth import stealth
 from xgenius.config import Config
 from xgenius.models import AccountCredentials, BrowserConfig
 from xgenius.process_utils import hard_close_browser
-from xgenius.proxy_service import IP_CHECK_URL, ProxyCheckError, check_proxy, parse_ip_response, parse_proxy
+from xgenius.proxy_service import ProxyCheckError, parse_proxy
+from xgenius.browser_proxy import prepare_proxy_extension, verify_browser_proxy
 from xgenius.profile_settings import ProfileSettingsError, browser_settings, workspace_settings
 from xgenius.browser_policy import BrowserPolicyError, prepare_policy_extension
 from xgenius.error_messages import safe_launch_error
@@ -23,7 +23,8 @@ from xgenius.browser_lifecycle import track_browser_process
 from xgenius.profile_leases import ProfileLease
 from xgenius.browser_workspace import prepare_workspace, browser_lock
 from xgenius.extension_sets import ExtensionSetStore
-from xgenius.window_frames import attach_frame
+from xgenius.profile_identity import prepare_identity, attach_identity
+from xgenius.profile_branding import prepare_branding
 
 
 # Размер экрана нужен для позиционирования окон Chrome (без tkinter: WinAPI на Windows)
@@ -90,9 +91,9 @@ class BrowserManager:
         workspace = workspace_settings(vars(credentials))
         proxy = parse_proxy(credentials.proxy)
         loop = asyncio.get_event_loop()
-        expected_ip = await loop.run_in_executor(None, check_proxy, proxy)
         extension_dir = None
         browser = None
+        proxy_verified = False
         try:
             chrome_bin = self.config.chrome_path
             driver_path = self.config.chromedriver_path
@@ -102,9 +103,8 @@ class BrowserManager:
             # 1. Возвращаем стандартную стратегию, чтобы React успевал отрендерить элементы
             options.page_load_strategy = "normal"
 
-            # 2. Флаги, снимающие фоновую нагрузку с CPU (сервер без видеокарты:
-            #    всё, что анимируется/проигрывается, рендерится процессором).
-            options.add_argument("--disable-gpu")
+            # Let Chrome select supported GPU acceleration for interactive use.
+            # Forcing software compositing makes scrolling/window activation slow.
             options.add_argument("--mute-audio")
             options.add_argument("--no-default-browser-check")
             options.add_argument("--no-first-run")
@@ -115,7 +115,7 @@ class BrowserManager:
             options.add_argument("--disable-default-apps")
             options.add_argument("--metrics-recording-only")
             options.add_argument("--log-level=3")
-            # Видео в ленте/чатах не стартует само — самый большой пожиратель CPU без GPU
+            # Keep autoplay opt-in without disabling accelerated rendering.
             options.add_argument("--autoplay-policy=user-gesture-required")
             options.add_argument("--disable-features=Translate,MediaRouter,OptimizationHints,InterestFeedContentSuggestions,BackForwardCache")
             # ChromeDriver supplies these switches by default in some versions.
@@ -144,10 +144,13 @@ class BrowserManager:
 
             # 3. Увеличиваем ширину окна до десктопного брейкпоинта (минимум 1024px)
             user_profile = str(self.config.get_profile_dir(credentials.username))
+            identity = await loop.run_in_executor(None, prepare_identity, self.config,credentials.username,
+                credentials.profile_name,credentials.profile_id,credentials.profile_number,credentials.icon_text)
             options.add_argument(f"--user-data-dir={user_profile}")
             if workspace['restore_tabs']:
                 options.add_argument('--restore-last-session')
             extension_paths = ExtensionSetStore(self.config).materialize(workspace['extension_set'], Path(user_profile))
+            extension_paths.append(await loop.run_in_executor(None,prepare_branding,Path(user_profile),identity))
             policy_extension = await loop.run_in_executor(
                 None, prepare_policy_extension, Path(user_profile), workspace)
             if policy_extension is not None:
@@ -167,11 +170,10 @@ class BrowserManager:
             
             # The proxy server is a Chrome flag, independent of the authentication worker.
             options.add_argument(f"--proxy-server={proxy.server}")
-            if proxy.username:
-                extension_dir = self._add_proxy_authentication(options, proxy)
+            options.add_argument('--proxy-bypass-list=<-loopback>')
+            extension_dir = prepare_proxy_extension(proxy)
+            extension_paths.append(Path(extension_dir.name))
             if extension_paths:
-                if extension_dir is not None:
-                    extension_paths.append(Path(extension_dir.name))
                 for argument in list(options.arguments):
                     if argument.startswith('--load-extension='):
                         options.arguments.remove(argument)
@@ -183,10 +185,16 @@ class BrowserManager:
             browser._xg_proxy_extension = extension_dir
             browser_lock(browser)
             track_browser_process(browser)
+            if not credentials.headless:
+                attach_identity(browser,identity)
+            browser._xg_proxy_ip = await loop.run_in_executor(None,verify_browser_proxy,browser,proxy)
+            proxy_verified = True
             await loop.run_in_executor(None, prepare_workspace, browser)
-            attach_frame(browser, workspace['frame_color'], credentials.window_frame_enabled)
             browser.set_script_timeout(10)
-            await loop.run_in_executor(None, ensure_search_engine, browser)
+            try:
+                await loop.run_in_executor(None,ensure_search_engine,browser,Path(user_profile))
+            except SearchConfigurationError:
+                logging.getLogger(__name__).warning('Optional search-provider repair was unavailable; opening profile normally')
 
             # PID chromedriver — по нему hard_close_browser добивает дерево процессов chrome
             try:
@@ -233,23 +241,6 @@ class BrowserManager:
             
             browser.set_page_load_timeout(45)
             browser.set_script_timeout(30)
-            # A working HTTP client proxy does not prove Chrome used the same route.
-            # Never navigate to X, import cookies or return a browser on mismatch.
-            def verify_browser_proxy():
-                browser.get(IP_CHECK_URL)
-                body = browser.execute_script("return document.body && document.body.innerText")
-                return parse_ip_response(body or "")
-
-            try:
-                browser_ip = await loop.run_in_executor(None, verify_browser_proxy)
-            except Exception:
-                raise ProxyCheckError("Chrome could not reach the IP check through the proxy. Check proxy authentication.") from None
-            if browser_ip != expected_ip:
-                raise ProxyCheckError(
-                    f"Proxy IP changed: preflight {expected_ip}, Chrome {browser_ip}. Profile launch stopped."
-                )
-            browser._xg_proxy_ip = browser_ip
-            await loop.run_in_executor(None, lambda: browser.get("about:blank"))
             browser._xg_browser_version = str(browser.capabilities.get('browserVersion', ''))
             browser._xg_user_agent = await loop.run_in_executor(
                 None, lambda: browser.execute_script('return navigator.userAgent'))
@@ -266,41 +257,7 @@ class BrowserManager:
                 extension_dir.cleanup()
             if isinstance(exc, (ProxyCheckError, ProfileSettingsError, BrowserPolicyError, SearchConfigurationError)):
                 raise
-            if browser is None:
+            if browser is None or proxy_verified:
                 detail = safe_launch_error(exc, vars(credentials))
                 raise ProfileSettingsError('Chrome could not start: ' + detail) from None
             raise ProxyCheckError("Chrome could not complete proxy IP verification.") from None
-
-    def _add_proxy_authentication(self, options: Options, proxy):
-        """Give each Chrome process its own Manifest V3 authentication worker."""
-        extension = tempfile.TemporaryDirectory(prefix="xanty_proxy_")
-        try:
-            path = Path(extension.name)
-            manifest = {
-                "manifest_version": 3,
-                "name": "XAnty Proxy Auth",
-                "version": "1.0.0",
-                "permissions": ["webRequest", "webRequestAuthProvider"],
-                "host_permissions": ["<all_urls>"],
-                "background": {"service_worker": "background.js"},
-            }
-            (path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-            credentials = json.dumps({"username": proxy.username, "password": proxy.password})
-            background = (
-                f"const credentials = {credentials};\n"
-                "const attempted = new Set();\n"
-                "chrome.webRequest.onAuthRequired.addListener((details, callback) => {\n"
-                "  if (!details.isProxy) { callback({}); return; }\n"
-                "  if (attempted.has(details.requestId)) { callback({cancel: true}); return; }\n"
-                "  attempted.add(details.requestId);\n"
-                "  callback({authCredentials: credentials});\n"
-                "}, {urls: ['<all_urls>']}, ['asyncBlocking']);\n"
-                "chrome.webRequest.onCompleted.addListener(d => attempted.delete(d.requestId), {urls: ['<all_urls>']});\n"
-                "chrome.webRequest.onErrorOccurred.addListener(d => attempted.delete(d.requestId), {urls: ['<all_urls>']});\n"
-            )
-            (path / "background.js").write_text(background, encoding="utf-8")
-            options.add_argument(f"--load-extension={path}")
-            return extension
-        except Exception:
-            extension.cleanup()
-            raise ProxyCheckError("Cannot prepare proxy authentication for Chrome.") from None

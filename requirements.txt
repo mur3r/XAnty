@@ -8,6 +8,7 @@ requests>=2.31
 urllib3>=1.26
 pywebview>=5.0
 cryptography>=43.0
+websocket-client>=1.7
 
 # Telegram-бот: класс TelegramBotManager в текущих исходниках отсутствует, поэтому пакет
 # нужен только если вы добавите свой модуль бота. Раскомментируйте при необходимости:

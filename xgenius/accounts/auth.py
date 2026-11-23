@@ -13,14 +13,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from xgenius.cookies import load_cookies, save_cookies
-from xgenius.profile_settings import browser_settings
+from xgenius.profile_settings import browser_settings, workspace_settings
 from xgenius.auto_login_policy import is_auto_login_enabled
 from xgenius.core import classify_driver_error
 from xgenius.models import AccountCredentials, AccountState
 from xgenius.process_utils import hard_close_browser
 from xgenius.proxy_service import ProxyCheckError
 from xgenius.profile_metadata import record_session_time
-from xgenius.browser_workspace import restore_tabs
+from xgenius.browser_workspace import restore_tabs, select_x_login_tab
 
 
 class AuthMixin:
@@ -51,8 +51,6 @@ class AuthMixin:
                     break
             self.save_accounts(accounts_data)
         self.logger.info(f"Session opened ({how})", credentials.username)
-        await asyncio.get_running_loop().run_in_executor(None, restore_tabs, browser, self.config,
-                                                        credentials.username, credentials.restore_tabs)
 
     async def login_account(self, credentials: AccountCredentials, fetch_followers: bool = True,
                             notify: bool = True) -> None:
@@ -99,15 +97,14 @@ class AuthMixin:
             if account_state.proxy_ip == previous_ip:
                 account_state.proxy_location = previous_location
             account_state.proxy_status = "ok"
+            if credentials.restore_tabs:
+                await loop.run_in_executor(None, restore_tabs, browser, self.config, credentials.username)
             if not credentials.auto_login:
-                # A manual profile must not navigate to X or inject authentication data.
-                await loop.run_in_executor(None, lambda: browser.get("about:blank"))
                 account_state.is_active = False
                 account_state.last_action_time = datetime.now()
-                await loop.run_in_executor(None, restore_tabs, browser, self.config,
-                                           credentials.username, credentials.restore_tabs)
                 self.logger.info("Browser opened; X auto sign-in disabled", credentials.username)
                 return
+            await loop.run_in_executor(None, select_x_login_tab, browser)
             try:
                 await loop.run_in_executor(
                     None, lambda: load_cookies(browser, self.config, credentials.username))
@@ -377,6 +374,10 @@ class AuthMixin:
             credentials = AccountCredentials(
                 username=account_data["username"],
                 password=account_data.get("password", ""),
+                profile_name=account_data.get('profile_name') or account_data['username'],
+                profile_id=account_data.get('profile_id', ''),
+                profile_number=account_data.get('profile_number'),
+                icon_text=account_data.get('icon_text', ''),
                 proxy=account_data.get("proxy"),
                 user_agent=account_data.get("user_agent"),
                 headless=account_data.get("headless", False),
@@ -385,6 +386,7 @@ class AuthMixin:
                 ct0_token=account_data.get("ct0_token"),
                 auto_login=is_auto_login_enabled(account_data),
                 **browser_settings(account_data),
+                **workspace_settings(account_data),
             )
 
             await self.login_account(credentials, fetch_followers=False, notify=False)

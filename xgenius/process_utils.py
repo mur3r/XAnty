@@ -55,6 +55,8 @@ def hard_close_browser(browser, timeout: float = 15.0) -> None:
     """
     if browser is None:
         return
+    from xgenius.profile_identity import detach_identity
+    detach_identity(browser)
     driver_process = getattr(browser,'_xg_driver_process',None)
     if driver_process is None:
         try:
@@ -63,8 +65,6 @@ def hard_close_browser(browser, timeout: float = 15.0) -> None:
                 driver_process = psutil.Process(service_process.pid)
         except (AttributeError,psutil.Error):
             pass
-    from xgenius.window_frames import detach_frame
-    detach_frame(browser)
 
     def _quit():
         try:

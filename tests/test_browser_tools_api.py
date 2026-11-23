@@ -54,18 +54,18 @@ class BrowserToolsApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status,200,await response.text())
         preset=(await response.json())['set']
         response=await self.client.post('/api/accounts',json={'username':'with_extensions','extension_set':preset['id'],
-            'restore_tabs':False,'frame_color':'#33aa88'})
+            'restore_tabs':False,'icon_text':'Work'})
         self.assertEqual(response.status,200,await response.text())
         stored=next(a for a in self.am.load_accounts() if a['username']=='with_extensions')
         self.assertEqual(stored['extension_set'],preset['id'])
         self.assertFalse(stored['restore_tabs'])
         self.assertTrue(list((self.engine.config.get_profile_dir('with_extensions')/'XAntyExtensions').rglob('manifest.json')))
 
-    async def test_preferences_validate_autosave_and_frame_switch(self):
-        for payload in ({'window_frames':True,'session_autosave':True,'autosave_seconds':120},):
+    async def test_preferences_validate_autosave_and_reject_removed_frame_switch(self):
+        for payload in ({'session_autosave':True,'autosave_seconds':120},):
             response=await self.client.put('/api/preferences',json=payload)
             self.assertEqual(response.status,200)
-        for payload in ({'window_frames':'yes'},{'autosave_seconds':1},{'autosave_seconds':True}):
+        for payload in ({'window_frames':True},{'window_frames':'yes'},{'autosave_seconds':1},{'autosave_seconds':True}):
             response=await self.client.put('/api/preferences',json=payload)
             self.assertEqual(response.status,400)
 

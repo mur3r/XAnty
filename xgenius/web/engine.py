@@ -166,7 +166,7 @@ class Engine:
                 "browser_timezone": acc.get("browser_timezone", ""),
                 "restore_tabs": acc.get('restore_tabs',True),
                 "extension_set": acc.get('extension_set',''),
-                "frame_color": acc.get('frame_color',''),
+                "icon_text": acc.get('icon_text',''),
                 "session_saved_at": getattr(st,'session_saved_at','') if st else '',
                 "session_save_error": getattr(st,'session_save_error','') if st else '',
                 "browser_version": st.browser_version if st and st.browser else "",

@@ -27,7 +27,8 @@ class ProxyFormatTests(unittest.TestCase):
         self.assertEqual(parse_proxy("proxy.example:8080").requests_url, "http://proxy.example:8080")
 
     def test_missing_invalid_and_unsupported_proxy_fail_closed(self):
-        for raw in ("", "not-a-proxy", "host:99999:user:pass", "socks5://host:1080", "host:80:user:"):
+        for raw in ("", "not-a-proxy", "host:99999:user:pass", "socks5://host:1080", "host:80:user:",
+                    "http://proxy.example,direct:8080", "http://http=proxy.example:8080"):
             with self.subTest(raw=raw), self.assertRaises(ProxyCheckError):
                 parse_proxy(raw)
 

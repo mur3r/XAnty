@@ -111,3 +111,6 @@ logs/
 
 # Профиль Chrome для окна веб-интерфейса (chrome --app)
 webui_profile/
+
+# Local workspace ownership lock, recreated by the running application.
+.xanty-workspace.lock

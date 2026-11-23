@@ -8,15 +8,43 @@ import threading
 import time
 from pathlib import Path
 
+from xgenius.system_tray import SystemTray
+
 
 class DesktopApi:
     def __init__(self):
         self._window = None
+        self._tray = None
+        self._hidden = False
+        self._closing = threading.Event()
+        self._window_lock = threading.Lock()
+
+    def hide(self) -> bool:
+        """Hide the window when the notification icon can bring it back."""
+        with self._window_lock:
+            if self._window is None or self._closing.is_set() or self._tray is None or not self._tray.available:
+                return False
+            if not self._hidden:
+                self._window.hide()
+                self._hidden = True
+            return True
+
+    def _show(self, only_if_hidden=False):
+        with self._window_lock:
+            window = self._window
+            if window is None or self._closing.is_set() or (only_if_hidden and not self._hidden):
+                return
+            form = getattr(window, 'native', None)
+            if str(getattr(form, 'WindowState', '')) == 'Minimized':
+                window.restore()
+            window.show()
+            self._hidden = False
 
     def close(self):
-        """Called by the Exit button in the native window."""
-        if self._window is not None:
-            self._window.destroy()
+        """Exit through the native window's shutdown path."""
+        with self._window_lock:
+            if self._window is not None and not self._closing.is_set():
+                self._window.destroy()
 
 
 def run_desktop() -> None:
@@ -35,7 +63,9 @@ def run_desktop() -> None:
         webview.settings['ALLOW_DOWNLOADS'] = True
 
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    closing = threading.Event()
+    bridge = DesktopApi()
+    closing = bridge._closing
+    packaged = getattr(sys, 'frozen', False)
     state = {}
     started = time.monotonic()
     root = application_home()
@@ -60,22 +90,14 @@ def run_desktop() -> None:
         static = icon.parent.parent
         template = (static / 'startup.html').read_text(encoding='utf-8')
         logo = base64.b64encode((icon.parent / 'app-icon.png').read_bytes()).decode('ascii')
-        return (template.replace('{{LOGO}}', logo).replace('{{ERROR}}', escape(error))
+        shortcuts = (static / 'desktop-shortcuts.js').read_text(encoding='utf-8')
+        return (template.replace('{{DESKTOP_SHORTCUTS}}', shortcuts)
+                .replace('{{LOGO}}', logo).replace('{{ERROR}}', escape(error))
                 .replace('{{MODE}}', 'error' if error else 'loading'))
-
-    bridge = DesktopApi()
-    if getattr(sys, 'frozen', False):
-        import ctypes
-        from ctypes import wintypes
-        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-        kernel.CreateMutexW.restype = wintypes.HANDLE
-        # Presence is enough for Inno Setup; independent workspaces may still coexist.
-        state['installer_mutex'] = kernel.CreateMutexW(None, False, 'Local\\XAnty.App.Running')
 
     def startup_status(message):
         from html import escape
-        page = loading_page().replace('Загружаем профили и настройки…', escape(message))
-        bridge._window.html = page
+        bridge._window.html = loading_page().replace('Загружаем профили и настройки…', escape(message))
         try:
             bridge._window.evaluate_js('document.getElementById("startup-status").textContent=' + json.dumps(message))
         except Exception:
@@ -85,12 +107,14 @@ def run_desktop() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         app = None
+        updater = None
         state["loop"] = loop
         try:
-            if getattr(sys, 'frozen', False):
+            if closing.is_set():
+                return
+            if packaged:
                 from xgenius.updates import UpdateManager
                 updater = UpdateManager()
-                state['startup_updater'] = updater
                 record('update_check_started')
                 restarting = loop.run_until_complete(updater.update_on_startup(closing, startup_status))
                 record('update_check_finished ' + updater.status)
@@ -145,9 +169,11 @@ def run_desktop() -> None:
                 except Exception:
                     pass
         finally:
-            updater = state.get('startup_updater')
             if updater is not None:
-                loop.run_until_complete(updater.shutdown())
+                try:
+                    loop.run_until_complete(updater.shutdown())
+                except Exception as exc:
+                    record(f'update_shutdown_error {type(exc).__name__}: {exc}')
             if app is not None and not app._stop.is_set():
                 try:
                     loop.run_until_complete(app.shutdown())
@@ -162,23 +188,41 @@ def run_desktop() -> None:
             record('backend_stopped')
 
     worker = threading.Thread(target=run_server, name="xanty-local-server", daemon=True)
+    tray = SystemTray(icon, bridge._show, bridge.close, lambda: bridge._show(only_if_hidden=True), record)
+    bridge._tray = tray
+    installer_mutex = None
+    if packaged:
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateMutexW.argtypes = (wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR)
+        kernel.CreateMutexW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel.CloseHandle.restype = wintypes.BOOL
+        # Inno Setup checks for the mutex. Workspaces can still coexist.
+        installer_mutex = kernel.CreateMutexW(None, False, 'Local\\XAnty.App.Running')
     try:
         storage = root / "webview"
         storage.mkdir(parents=True, exist_ok=True)
         bridge._window = webview.create_window("XAnty", html=loading_page(), js_api=bridge,
                                               width=1500, height=920, min_size=(950, 620),
                                               background_color='#101014')
+        bridge._window.events.shown += tray.start
         record('window_created')
         # Require the modern renderer; the deprecated MSHTML engine cannot render this UI.
         # pywebview starts this callback in a worker; the native GUI loop never waits for the backend.
         webview.start(worker.start, gui="edgechromium", private_mode=False, storage_path=str(storage), icon=str(icon))
     finally:
         closing.set()
+        tray.stop()
         loop = state.get("loop")
         app = state.get("app")
-        if loop is not None and app is not None and worker.is_alive():
-            try:
-                loop.call_soon_threadsafe(lambda: loop.create_task(app.shutdown()))
-            except RuntimeError:
-                pass
+        if worker.is_alive():
+            if loop is not None and app is not None:
+                try:
+                    loop.call_soon_threadsafe(lambda: loop.create_task(app.shutdown()))
+                except RuntimeError:
+                    pass
             worker.join(timeout=25)
+        if installer_mutex:
+            kernel.CloseHandle(installer_mutex)

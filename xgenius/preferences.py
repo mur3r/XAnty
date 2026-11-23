@@ -14,7 +14,7 @@ def valid_columns(value):
 
 def read_preferences():
     result = {'language': 'ru', 'theme': 'dark', 'columns': list(DEFAULT_COLUMNS), 'trash_retention_days': 30,
-              'window_frames': True, 'session_autosave': True, 'autosave_seconds': 60}
+              'session_autosave': True, 'autosave_seconds': 60}
     try:
         data = json.loads((application_home() / 'preferences.json').read_text(encoding='utf-8'))
         if data.get('language') in ('ru', 'en', 'uk'):
@@ -26,7 +26,7 @@ def read_preferences():
         days = data.get('trash_retention_days')
         if type(days) is int and 0 <= days <= 3650:
             result['trash_retention_days'] = days
-        for key in ('window_frames','session_autosave'):
+        for key in ('session_autosave',):
             if type(data.get(key)) is bool:
                 result[key] = data[key]
         if type(data.get('autosave_seconds')) is int and 30 <= data['autosave_seconds'] <= 3600:
@@ -38,7 +38,7 @@ def read_preferences():
 
 def save_preferences(data):
     if not isinstance(data, dict) or set(data) - {'language', 'theme', 'columns', 'trash_retention_days',
-                                               'window_frames','session_autosave','autosave_seconds'}:
+                                               'session_autosave','autosave_seconds'}:
         raise ValueError('Invalid interface preferences')
     result = read_preferences()
     if 'language' in data and data['language'] not in ('ru', 'en', 'uk'):
@@ -49,7 +49,7 @@ def save_preferences(data):
         raise ValueError('Invalid table columns')
     if 'trash_retention_days' in data:
         retention_days(data['trash_retention_days'])
-    for key in ('window_frames','session_autosave'):
+    for key in ('session_autosave',):
         if key in data and type(data[key]) is not bool:
             raise ValueError('Invalid browser preference')
     if 'autosave_seconds' in data and (type(data['autosave_seconds']) is not int or not 30 <= data['autosave_seconds'] <= 3600):

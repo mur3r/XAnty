@@ -82,7 +82,7 @@ class BrowserLaunchTests(unittest.TestCase):
         service_module.Service = lambda path: types.SimpleNamespace(process=types.SimpleNamespace(pid=123))
         selenium = types.ModuleType('selenium')
         selenium.webdriver = chrome_webdriver
-        self.proxy = types.SimpleNamespace(server='http://proxy.example:8080', username=None, password=None)
+        self.proxy = types.SimpleNamespace(host='proxy.example',port=8080,server='http://proxy.example:8080', username=None, password=None)
         package = types.ModuleType('xgenius')
         package.__path__ = [str(ROOT)]
         modules = {'xgenius': package, 'selenium': selenium,
@@ -98,6 +98,9 @@ class BrowserLaunchTests(unittest.TestCase):
                        parse_proxy=lambda value: self.proxy, check_proxy=lambda value: '203.0.113.7',
                        parse_ip_response=lambda value: value),
                    'xgenius.settings': types.SimpleNamespace(BLOCK_MEDIA_URLS=True)}
+        from xgenius.browser_proxy import prepare_proxy_extension
+        modules['xgenius.browser_proxy']=types.SimpleNamespace(prepare_proxy_extension=prepare_proxy_extension,
+            verify_browser_proxy=lambda browser,proxy,expected_ip=None:'203.0.113.7')
         context = patch.dict(sys.modules, modules)
         context.start()
         self.addCleanup(context.stop)
@@ -137,6 +140,25 @@ class BrowserLaunchTests(unittest.TestCase):
         self.assertEqual(self.stealth_args[0]['user_agent'], browser._xg_user_agent)
         self.assertIn(('Emulation.setTimezoneOverride', {'timezoneId': 'Europe/Kyiv'}), browser.cdp)
 
+    def test_proxy_verification_does_not_navigate_a_user_tab(self):
+        with patch.object(self.browser_module,'ensure_search_engine',return_value={'ok':True}):
+            browser=asyncio.run(self.manager.create_browser(self.models.AccountCredentials('quiet','',proxy='proxy')))
+        self.assertEqual(browser.visited,[])
+        self.assertEqual(browser._xg_proxy_ip,'203.0.113.7')
+
+    def test_failure_after_proxy_verification_keeps_its_actual_reason(self):
+        with patch.object(self.browser_module, 'prepare_workspace', side_effect=RuntimeError('session snapshot failed')):
+            with self.assertRaisesRegex(self.settings.ProfileSettingsError, 'session snapshot failed') as raised:
+                asyncio.run(self.manager.create_browser(self.models.AccountCredentials('quiet', '', proxy='proxy')))
+        self.assertNotIn('proxy IP verification', str(raised.exception))
+        self.assertEqual(self.closed, self.created)
+
+    def test_manual_browser_keeps_native_gpu_acceleration_available(self):
+        browser=asyncio.run(self.manager.create_browser(self.models.AccountCredentials('desktop','',proxy='proxy')))
+        self.assertNotIn('--disable-gpu',browser.options.arguments)
+        self.assertFalse(any(arg.startswith(('--use-gl=swiftshader','--use-angle=swiftshader','--disable-gpu-compositing'))
+                             for arg in browser.options.arguments))
+
     def test_mismatch_stops_launch_and_closes_browser(self):
         self.version = '161.0.0.0'
         with self.assertRaisesRegex(self.settings.ProfileSettingsError, 'does not match'):
@@ -150,7 +172,7 @@ class BrowserLaunchTests(unittest.TestCase):
         arguments = browser.options.arguments
         loaded = [value for value in arguments if value.startswith('--load-extension=')]
         self.assertEqual(len(loaded), 1)
-        extension = Path(loaded[0].split('=', 1)[1])
+        extension = next(Path(path) for path in loaded[0].split('=',1)[1].split(',') if path.endswith('.xgenius-policy'))
         rules = json.loads((extension / 'rules.json').read_text())
         self.assertEqual(len(rules), 1)
         self.assertEqual(rules[0]['condition']['resourceTypes'], ['image', 'font'])
@@ -171,14 +193,15 @@ class BrowserLaunchTests(unittest.TestCase):
         self.assertEqual(len(loaded), 1)
         paths = {Path(value) for value in loaded[0].split('=', 1)[1].split(',')}
         self.assertEqual(paths, {preset, Path(browser._xg_proxy_extension.name),
-            Path(self.temp.name) / 'combined' / '.xgenius-policy'})
+            Path(self.temp.name) / 'combined' / '.xgenius-policy',Path(self.temp.name)/'combined'/'.xanty-profile-label'})
         proxy_manifest = json.loads((Path(browser._xg_proxy_extension.name) / 'manifest.json').read_text())
         self.assertIn('webRequestAuthProvider', proxy_manifest['permissions'])
 
     def test_all_policy_controls_disabled_load_no_policy_extension(self):
         browser = asyncio.run(self.manager.create_browser(self.models.AccountCredentials(
             'disabled', '', proxy='proxy', phishing_protection=False)))
-        self.assertFalse(any(value.startswith('--load-extension=') for value in browser.options.arguments))
+        paths=[path for value in browser.options.arguments if value.startswith('--load-extension=') for path in value.split('=',1)[1].split(',')]
+        self.assertFalse(any(path.endswith('.xgenius-policy') for path in paths))
         self.assertTrue(browser.options.experimental['prefs']['safebrowsing.enabled'])
 
     def test_invalid_policy_is_rejected_before_starting_chrome(self):

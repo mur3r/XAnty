@@ -31,7 +31,6 @@ from xgenius.preferences import read_preferences, save_preferences
 from xgenius.updates import UpdateError, UpdateManager
 from xgenius.profile_leases import ProfileLease
 from xgenius.extension_sets import ExtensionSetStore
-from xgenius.window_frames import set_frames_enabled, attach_frame
 from xgenius.profile_settings import workspace_settings
 from xgenius.web.workspace_api import WorkspaceApiMixin
 
@@ -128,12 +127,6 @@ class WebApp(WorkspaceApiMixin):
             return self._json(read_preferences())
         try:
             prefs = save_preferences(await request.json())
-            set_frames_enabled(prefs['window_frames'])
-            if self.engine is not None:
-                for account in self.engine.account_manager.load_accounts():
-                    st = self.engine.account_manager.accounts.get(account['username'])
-                    if st and st.browser:
-                        attach_frame(st.browser,workspace_settings(account)['frame_color'],True)
             return self._json(prefs)
         except ValueError as exc:
             raise ActionError(str(exc)) from exc

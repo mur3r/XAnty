@@ -12,6 +12,9 @@ from xgenius.portable_session import normalize_session, store_session
 from xgenius.profile_leases import ProfileLease, profile_directory
 
 
+_EMPTY_STARTUP_PAGES = {'data:,', 'about:blank', 'chrome://newtab/'}
+
+
 def browser_lock(browser):
     lock = getattr(browser, '_xg_workspace_lock', None)
     if lock is None:
@@ -71,52 +74,88 @@ def capture_tabs(browser, config, username):
         handles = getattr(browser, 'window_handles', [])
         order = {h.removeprefix('CDwindow-'): i for i, h in enumerate(handles)}
         pages.sort(key=lambda t: order.get(t.get('targetId'), len(order)))
+        handle = getattr(browser, 'current_window_handle', '')
+        active_target = handle.removeprefix('CDwindow-')
+        active = next((i for i, page in enumerate(pages) if page.get('targetId') == active_target), 0)
         # A transient lack of page targets must not erase a useful previous snapshot.
-        return write_tabs(config, username, [t['url'] for t in pages]) if any(t.get('type') == 'page' for t in targets) else 0
+        return write_tabs(config, username, [t['url'] for t in pages], active) if any(
+            t.get('type') == 'page' for t in targets) else 0
 
 
 def prepare_workspace(browser):
-    """Preserve native restored pages while launch checks use a disposable tab."""
+    """Record which startup pages can be replaced by a portable tab snapshot."""
     targets = browser.execute_cdp_cmd('Target.getTargets', {}).get('targetInfos', [])
-    browser._xg_native_tabs = [t['url'] for t in targets if t.get('type') == 'page' and valid_tab(t.get('url'))]
-    browser._xg_empty_startup_targets = {t.get('targetId') for t in targets if t.get('type') == 'page' and
-                                       t.get('url') in ('data:,','about:blank','chrome://newtab/')}
-    browser._xg_ignored_targets = set()
-    if browser._xg_native_tabs:
-        browser.switch_to.new_window('tab')
-    handle = getattr(browser,'current_window_handle',None)
-    if handle:
-        browser._xg_bootstrap_handle = handle
-        browser._xg_ignored_targets.add(handle.removeprefix('CDwindow-'))
+    browser._xg_empty_startup_targets = {
+        target['targetId'] for target in targets
+        if target.get('type') == 'page' and target.get('url') in _EMPTY_STARTUP_PAGES
+    }
 
 
 def restore_tabs(browser, config, username, enabled=True):
     if not enabled:
-        browser._xg_ignored_targets = set()
-        browser._xg_bootstrap_handle = None
         return 0
     with browser_lock(browser):
-        native = getattr(browser, '_xg_native_tabs', [])
-        urls = native or read_tabs(config, username)['tabs']
+        restored = getattr(browser, '_xg_restored_tab_count', None)
+        if restored is not None:
+            return restored
+        ignored = getattr(browser, '_xg_ignored_targets', set())
+        targets = browser.execute_cdp_cmd('Target.getTargets', {}).get('targetInfos', [])
+        pages = [target for target in targets if target.get('type') == 'page' and target['targetId'] not in ignored]
+        native_count = sum(valid_tab(page.get('url')) for page in pages)
+        if native_count:
+            browser._xg_restored_tab_count = native_count
+            return native_count
+        snapshot = read_tabs(config, username)
+        urls = snapshot['tabs']
         if not urls:
-            browser._xg_ignored_targets = set()
-            browser._xg_bootstrap_handle = None
+            browser._xg_restored_tab_count = 0
             return 0
-        if not native:
+        active = snapshot.get('active')
+        if type(active) is not int or not 0 <= active < len(urls):
+            active = 0
+
+        created = []
+        try:
             for url in urls:
-                browser.execute_cdp_cmd('Target.createTarget', {'url': url})
-        bootstrap = getattr(browser, '_xg_bootstrap_handle', None)
-        handles = getattr(browser, 'window_handles', [])
-        empty = getattr(browser,'_xg_empty_startup_targets',set())
-        for handle in handles:
-            if (handle == bootstrap or handle.removeprefix('CDwindow-') in empty) and len(browser.window_handles) > 1:
-                browser.switch_to.window(handle)
-                browser.close()
-        if bootstrap and getattr(browser,'window_handles',[]):
-            browser.switch_to.window(browser.window_handles[0])
-        browser._xg_ignored_targets = set()
-        browser._xg_bootstrap_handle = None
+                target = browser.execute_cdp_cmd('Target.createTarget', {'url': url, 'background': True})
+                created.append(target['targetId'])
+            handles = {handle.removeprefix('CDwindow-'): handle for handle in browser.window_handles}
+            browser.switch_to.window(handles[created[active]])
+        except Exception:
+            for target in created:
+                try:
+                    browser.execute_cdp_cmd('Target.closeTarget', {'targetId': target})
+                except Exception:
+                    pass
+            raise
+
+        browser._xg_restored_tab_count = len(urls)
+        startup = getattr(browser, '_xg_empty_startup_targets', set())
+        for page in pages:
+            if page['targetId'] in startup and page.get('url') in _EMPTY_STARTUP_PAGES:
+                browser.execute_cdp_cmd('Target.closeTarget', {'targetId': page['targetId']})
         return len(urls)
+
+
+def select_x_login_tab(browser):
+    with browser_lock(browser):
+        current = browser.current_window_handle
+        handles = {handle.removeprefix('CDwindow-'): handle for handle in browser.window_handles}
+        targets = browser.execute_cdp_cmd('Target.getTargets', {}).get('targetInfos', [])
+        pages = {handles[target['targetId']]: target.get('url', '') for target in targets
+                 if target.get('type') == 'page' and target['targetId'] in handles}
+        x_tabs = []
+        for handle, url in pages.items():
+            if valid_tab(url):
+                host = urlsplit(url).hostname
+                if host in ('x.com', 'twitter.com') or host.endswith(('.x.com', '.twitter.com')):
+                    x_tabs.append(handle)
+        if current in x_tabs:
+            return
+        if x_tabs:
+            browser.switch_to.window(x_tabs[0])
+        elif pages.get(current) not in _EMPTY_STARTUP_PAGES:
+            browser.switch_to.new_window('tab')
 
 
 def parse_cookie_input(data):

@@ -69,6 +69,41 @@ class UpdateTests(unittest.TestCase):
 
 
 class UpdateGuardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_exit_during_installation_status_cannot_start_the_helper(self):
+        import threading
+        closing=threading.Event()
+        selected=updates.select_release(release('v2099.1.1.1'),'example/XAnty','2026.11.22.2')
+        def progress(message):
+            if message.startswith('Устанавливаем обновление.'):closing.set()
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('xgenius.updates.application_home',return_value=Path(directory)), \
+                patch('xgenius.updates.read_update_config',return_value={'repository':'example/XAnty'}), \
+                patch('xgenius.updates.supports_install',return_value=True), \
+                patch('xgenius.updates.fetch_release',return_value=selected), \
+                patch('xgenius.updates.download_release'), \
+                patch.object(updates.UpdateManager,'_launch_helper') as install:
+            manager=updates.UpdateManager()
+            self.assertFalse(await manager.update_on_startup(closing,progress))
+            install.assert_not_called()
+
+    async def test_exit_during_startup_progress_is_not_cleared_by_download(self):
+        import threading
+        closing=threading.Event()
+        selected=updates.select_release(release('v2099.1.1.1'),'example/XAnty','2026.11.22.2')
+        def progress(message):
+            if message.startswith('Скачиваем обновление '):closing.set()
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('xgenius.updates.application_home',return_value=Path(directory)), \
+                patch('xgenius.updates.read_update_config',return_value={'repository':'example/XAnty'}), \
+                patch('xgenius.updates.supports_install',return_value=True), \
+                patch('xgenius.updates.fetch_release',return_value=selected), \
+                patch('xgenius.updates.download_release') as download, \
+                patch.object(updates.UpdateManager,'_launch_helper') as install:
+            manager=updates.UpdateManager()
+            self.assertFalse(await manager.update_on_startup(closing,progress))
+            self.assertTrue(closing.is_set())
+            download.assert_not_called();install.assert_not_called()
+
     async def test_startup_checks_even_with_fresh_cache_and_installs_without_user_clicks(self):
         import threading
         import time

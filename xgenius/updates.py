@@ -208,7 +208,6 @@ class UpdateManager:
         """Finish updating before the workspace starts; return True when exiting."""
         if not supports_install() or not self.config['repository'] or closing.is_set():
             return False
-        self._cancel_download = closing
         try:
             progress('Проверяем обновления…')
             # A launch always checks GitHub, regardless of the background check cache.
@@ -222,8 +221,12 @@ class UpdateManager:
                 progress('Предыдущее обновление не установилось. Запускаем сохранённую версию…')
                 return False
             progress('Скачиваем обновление ' + self.release['version'] + '…')
+            if closing.is_set():
+                return False
             self.start_download()
             while self._download_task and not self._download_task.done():
+                if closing.is_set():
+                    self._cancel_download.set()
                 await asyncio.sleep(0.15)
                 if not closing.is_set() and self.release['size']:
                     percent = min(100, self.downloaded * 100 // self.release['size'])
@@ -233,6 +236,8 @@ class UpdateManager:
             if closing.is_set() or self.status != 'ready':
                 return False
             progress('Устанавливаем обновление. XAnty сейчас перезапустится…')
+            if closing.is_set():
+                return False
             await self.install()
             return True
         except (UpdateError, OSError):

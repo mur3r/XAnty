@@ -31,12 +31,14 @@ class AccountCredentials:
     window_height: int = 768
     restore_tabs: bool = True
     extension_set: str = ''
-    frame_color: str = '#a46bff'
-    window_frame_enabled: bool = True
     block_images: bool = False
     block_media: bool = False
     block_fonts: bool = False
     phishing_protection: bool = True
+    profile_name: str = ''
+    profile_id: str = ''
+    profile_number: Optional[int] = None
+    icon_text: str = ''
 
 
 @dataclass

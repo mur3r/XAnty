@@ -1,6 +1,10 @@
 'use strict';
 const I18N = (() => {
   const rows = `
+profile_icon_text|Текст значка|Icon text|Текст піктограми
+profile_icon_auto|Из названия профиля|From profile name|Із назви профілю
+profile_icon_hint|До 8 символов на самой иконке. Короткий текст крупнее и легче читается. Применяется при следующем запуске профиля.|Up to 8 characters on the icon itself. Short text is larger and easier to read. Applied on next profile launch.|До 8 символів на самій піктограмі. Короткий текст більший і легше читається. Застосовується під час наступного запуску профілю.
+desktop_hide_failed|Не удалось создать значок в области уведомлений. Окно оставлено открытым.|The notification icon is unavailable. The window has been kept open.|Не вдалося створити піктограму в області сповіщень. Вікно залишено відкритим.
 browser_tools_settings|Настройки браузеров|Browser preferences|Налаштування браузерів
 restore_tabs|Восстанавливать открытые вкладки|Restore open tabs|Відновлювати відкриті вкладки
 extension_set|Набор расширений|Extension set|Набір розширень
@@ -14,9 +18,6 @@ set_name|Название набора|Set name|Назва набору
 save_set|Сохранить набор|Save set|Зберегти набір
 no_extension_sets|Наборов пока нет|No extension sets yet|Наборів поки немає
 delete_set_question|Удалить набор из списка? Копии расширений в существующих профилях сохранятся.|Delete this set from the list? Existing profile copies will remain.|Видалити набір зі списку? Копії розширень у наявних профілях збережуться.
-frame_color|Цвет рамки окна|Window border color|Колір рамки вікна
-window_frames|Цветные рамки окон профилей|Colored profile window borders|Кольорові рамки вікон профілів
-frames_hint|Цвет задаётся в редакторе профиля. В Windows 10 рамка отображается у активного окна; в Windows 11 используется также системная рамка.|Set the color in the profile editor. Windows 10 outlines the active window; Windows 11 also uses the system border.|Колір задається в редакторі профілю. У Windows 10 рамка відображається для активного вікна; у Windows 11 використовується також системна рамка.
 session_autosave|Автоматически сохранять сессию|Save sessions automatically|Автоматично зберігати сесію
 autosave_seconds|Интервал сохранения, секунд|Save interval, seconds|Інтервал збереження, секунд
 autosave_hint|30–3600 секунд. Сохраняются cookies всех сайтов и адреса вкладок. Chrome сохраняет локальное хранилище самостоятельно. Несохранённые формы и состояние JavaScript не копируются.|30–3600 seconds. Saves cookies for all sites and tab URLs. Chrome maintains local storage itself. Unsaved forms and JavaScript state are not copied.|30–3600 секунд. Зберігаються cookies всіх сайтів та адреси вкладок. Chrome самостійно зберігає локальне сховище. Незбережені форми та стан JavaScript не копіюються.

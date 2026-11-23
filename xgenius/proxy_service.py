@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from urllib.parse import quote, unquote, urlsplit
 
 
-IP_CHECK_URL = "https://api.ipify.org?format=json"
+IP_CHECK_URL = "https://api.ipify.org/?format=json"
 LOCATION_URL = "https://ipwho.is/"
 
 
@@ -56,7 +56,7 @@ def parse_proxy(value: str) -> HttpProxy:
             raise ValueError("missing host or port")
         if bool(username) != bool(password):
             raise ValueError("incomplete credentials")
-        if any(c in host for c in ("/", "@", "\\")):
+        if any(c in host for c in ("/", "@", "\\", ",", ";", "=", "<", ">", "|")):
             raise ValueError("invalid host")
     except (ValueError, TypeError) as exc:
         raise ProxyCheckError("Invalid HTTP proxy. Use host:port:user:password or http://user:password@host:port.") from None
@@ -66,7 +66,9 @@ def parse_proxy(value: str) -> HttpProxy:
 def parse_ip_response(body: str) -> str:
     import json
     try:
-        ip = json.loads(body)["ip"]
+        try:data=json.loads(body)
+        except ValueError:data=body.strip()
+        ip=data['ip'] if isinstance(data,dict) else data
         return str(ipaddress.ip_address(ip))
     except (ValueError, KeyError, TypeError):
         raise ProxyCheckError("IP check did not return a valid public IP.") from None

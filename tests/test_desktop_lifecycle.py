@@ -1,13 +1,17 @@
 """Closing the native window stops its background server."""
 import asyncio
 import importlib.util
+import json
+import os
 import sys
 import tempfile
 import threading
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
+
+from webview.event import Event
 
 
 ROOT = Path(__file__).resolve().parents[1] / "xgenius" / "desktop.py"
@@ -18,26 +22,43 @@ spec.loader.exec_module(desktop)
 
 class DesktopLifecycleTests(unittest.TestCase):
     def test_startup_update_restarts_before_any_workspace_is_loaded(self):
-        from unittest.mock import AsyncMock, Mock
         from xgenius import updates
+
         with tempfile.TemporaryDirectory() as directory:
             finished = threading.Event()
             window = Mock()
             window.destroy.side_effect = finished.set
-            updater = types.SimpleNamespace(status='installing', update_on_startup=AsyncMock(return_value=True), shutdown=AsyncMock())
+            window.events = types.SimpleNamespace(shown=Event(window))
+
+            async def install_on_startup(closing, progress):
+                progress('Устанавливаем обновление…')
+                return True
+
+            updater = types.SimpleNamespace(status='installing',
+                                            update_on_startup=AsyncMock(side_effect=install_on_startup),
+                                            shutdown=AsyncMock())
             backend = Mock(side_effect=AssertionError('Workspace started before replacement'))
+            kernel = Mock()
+
             def start(func, **kwargs):
                 func()
-                self.assertTrue(finished.wait(3))
+                self.assertTrue(finished.wait(3), 'Startup updater did not close the old window')
+
             modules = {
                 'webview': types.SimpleNamespace(create_window=lambda *a, **kw: window, start=start),
                 'xgenius.config': types.SimpleNamespace(application_home=lambda: Path(directory)),
                 'xgenius.web.server': types.SimpleNamespace(WebApp=backend),
             }
             with patch.dict(sys.modules, modules), patch.object(sys, 'frozen', True, create=True), \
-                    patch('ctypes.WinDLL', return_value=Mock()), patch.object(updates, 'UpdateManager', return_value=updater):
+                    patch('ctypes.WinDLL', return_value=kernel), patch.object(updates, 'UpdateManager', return_value=updater):
                 desktop.run_desktop()
+
+            kernel.CreateMutexW.assert_called_once_with(None, False, 'Local\\XAnty.App.Running')
+            kernel.CloseHandle.assert_called_once_with(kernel.CreateMutexW.return_value)
             updater.update_on_startup.assert_awaited_once()
+            updater.shutdown.assert_awaited_once()
+            window.evaluate_js.assert_called_once()
+            self.assertIn('Устанавливаем обновление…', window.html)
             backend.assert_not_called()
             window.load_url.assert_not_called()
 
@@ -63,7 +84,10 @@ class DesktopLifecycleTests(unittest.TestCase):
         self.assertFalse(accessed.is_set(), 'The JS bridge traversed native window properties during startup')
 
     def test_native_window_is_created_before_backend_initialization(self):
+        from xgenius import __version__
+
         with tempfile.TemporaryDirectory() as directory:
+            health = Path(directory) / 'update.health.json'
             state = {'gui_started': False}
             loaded = threading.Event()
 
@@ -83,6 +107,9 @@ class DesktopLifecycleTests(unittest.TestCase):
                     self._stop.set()
 
             class Window:
+                def __init__(self):
+                    self.events = types.SimpleNamespace(shown=Event(self))
+
                 def destroy(self): pass
                 def load_url(self, url):
                     state['url'] = url
@@ -106,15 +133,18 @@ class DesktopLifecycleTests(unittest.TestCase):
                 'xgenius.config': types.SimpleNamespace(application_home=lambda: Path(directory)),
                 'xgenius.web.server': types.SimpleNamespace(WebApp=FakeWebApp),
             }
-            with patch.dict(sys.modules, modules):
+            with patch.dict(sys.modules, modules), patch.dict(os.environ, {'XANTY_UPDATE_HEALTH_FILE': str(health)}):
                 desktop.run_desktop()
+                self.assertIsNone(os.environ.get('XANTY_UPDATE_HEALTH_FILE'))
             self.assertIn('XAnty', state['loading_html'])
             self.assertEqual(state.get('url'), 'http://127.0.0.1:12345/', state)
+            self.assertEqual(json.loads(health.read_text(encoding='utf-8')), {'version': __version__, 'pid': os.getpid()})
 
-    def test_native_window_starts_after_server_and_stops_it_on_close(self):
+    def test_tray_starts_after_window_shows_and_exit_drains_the_server(self):
         with tempfile.TemporaryDirectory() as directory:
             state = {}
             loaded = threading.Event()
+            tray_started = threading.Event()
 
             class FakeWebApp:
                 def __init__(self, loop, desktop_mode=False):
@@ -133,9 +163,19 @@ class DesktopLifecycleTests(unittest.TestCase):
 
             class FakeWindow:
                 closed = False
+                visible = True
+
+                def __init__(self):
+                    self.events = types.SimpleNamespace(shown=Event(self))
 
                 def destroy(self):
                     self.closed = True
+
+                def hide(self):
+                    self.visible = False
+
+                def show(self):
+                    self.visible = True
 
                 def load_url(self, url):
                     state['url'] = url
@@ -152,12 +192,44 @@ class DesktopLifecycleTests(unittest.TestCase):
                 state["window"] = FakeWindow()
                 return state["window"]
 
+            class FakeTray:
+                def __init__(self, icon, on_open, on_exit, on_unavailable, record):
+                    self.on_open = on_open
+                    self.on_exit = on_exit
+                    self.on_unavailable = on_unavailable
+                    self.available = False
+                    state['tray'] = self
+
+                def start(self):
+                    tray_started.set()
+
+                def stop(self):
+                    state['tray_stopped'] = True
+
             def start(func=None, **kwargs):
                 state["renderer"] = kwargs["gui"]
                 if func:
                     func()
                 self.assertTrue(loaded.wait(3), state)
-                state["bridge"].close()
+                self.assertFalse(tray_started.is_set())
+                window = state['window']
+                window.events.shown.set()
+                self.assertTrue(tray_started.wait(3), 'Tray did not start when the native window was shown')
+                tray = state['tray']
+                bridge = state['bridge']
+                self.assertFalse(bridge.hide())
+                self.assertTrue(window.visible)
+                tray.available = True
+                self.assertTrue(bridge.hide())
+                self.assertFalse(window.visible)
+                tray.on_open()
+                self.assertTrue(window.visible)
+                self.assertTrue(bridge.hide())
+                tray.available = False
+                tray.on_unavailable()
+                self.assertTrue(window.visible)
+                self.assertFalse(state['app']._stop.is_set())
+                tray.on_exit()
 
             package = types.ModuleType("xgenius")
             package.__path__ = []
@@ -170,7 +242,7 @@ class DesktopLifecycleTests(unittest.TestCase):
                 "xgenius.config": types.SimpleNamespace(application_home=lambda: Path(directory)),
                 "xgenius.web.server": types.SimpleNamespace(WebApp=FakeWebApp),
             }
-            with patch.dict(sys.modules, modules):
+            with patch.dict(sys.modules, modules), patch.object(desktop, 'SystemTray', FakeTray, create=True):
                 desktop.run_desktop()
 
             self.assertTrue(state["app"].desktop_mode)
@@ -179,6 +251,7 @@ class DesktopLifecycleTests(unittest.TestCase):
             self.assertEqual(state["url"], "http://127.0.0.1:12345/")
             self.assertEqual(state["renderer"], "edgechromium")
             self.assertTrue(state["window"].closed)
+            self.assertTrue(state['tray_stopped'])
             self.assertTrue(state["app"]._stop.is_set())
             self.assertNotEqual(state["server_thread"], threading.current_thread().name)
 
@@ -187,7 +260,10 @@ class DesktopLifecycleTests(unittest.TestCase):
             shown = threading.Event()
             state = {}
             class Window:
-                def __init__(self, html): self.html = html
+                def __init__(self, html):
+                    self.html = html
+                    self.events = types.SimpleNamespace(shown=Event(self))
+
                 def load_html(self, html):
                     state['rendered'] = html
                     shown.set()
@@ -216,6 +292,7 @@ class DesktopLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             beginning = threading.Event()
             window = Mock()
+            window.events = types.SimpleNamespace(shown=Event(window))
             class SlowApp:
                 def __init__(self, *a, **kw): self._stop = asyncio.Event()
                 async def run_forever(self, on_ready, **kwargs):

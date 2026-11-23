@@ -7,7 +7,7 @@ import os
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from xgenius.config import Config
 from xgenius import browser_workspace as workspace
 from xgenius.profile_leases import ProfileLease, ProfileInUseError
@@ -29,20 +29,53 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(workspace.capture_tabs(browser,self.config,'alice'),2)
         self.assertEqual(workspace.read_tabs(self.config,'alice')['tabs'], ['https://example.com/a','https://example.org/b#part'])
 
-    def test_restore_pages_does_not_replace_native_restored_tabs(self):
-        workspace.write_tabs(self.config,'alice', ['https://saved.example/'])
-        created=[]
-        browser=SimpleNamespace(_xg_native_tabs=['https://native.example/'], execute_cdp_cmd=lambda m,a: created.append(a))
-        self.assertEqual(workspace.restore_tabs(browser,self.config,'alice'),1)
-        self.assertEqual(created,[])
-        browser._xg_native_tabs=[]
-        self.assertEqual(workspace.restore_tabs(browser,self.config,'alice'),1)
-        self.assertEqual(created,[{'url':'https://saved.example/'}])
+    def test_native_restored_tabs_keep_their_pages_and_selection(self):
+        workspace.write_tabs(self.config, 'alice', ['https://saved.example/'])
+        browser = WorkspaceBrowser('https://one.example/', 'https://selected.example/')
+        browser.current_window_handle = '2'
 
-    def test_first_launch_bootstrap_becomes_a_normal_user_tab(self):
-        browser=SimpleNamespace(_xg_native_tabs=[],_xg_bootstrap_handle='one',_xg_ignored_targets={'one'})
-        self.assertEqual(workspace.restore_tabs(browser,self.config,'alice'),0)
-        self.assertEqual(browser._xg_ignored_targets,set())
+        workspace.prepare_workspace(browser)
+        self.assertEqual(workspace.restore_tabs(browser, self.config, 'alice'), 2)
+
+        self.assertEqual(browser.pages, {'1': 'https://one.example/', '2': 'https://selected.example/'})
+        self.assertEqual(browser.current_window_handle, '2')
+
+    def test_restore_disabled_leaves_startup_page_untouched(self):
+        workspace.write_tabs(self.config, 'alice', ['https://saved.example/'])
+        browser = WorkspaceBrowser('about:blank')
+
+        workspace.prepare_workspace(browser)
+        self.assertEqual(workspace.restore_tabs(browser, self.config, 'alice', enabled=False), 0)
+
+        self.assertEqual(browser.pages, {'1': 'about:blank'})
+        self.assertEqual(browser.current_window_handle, '1')
+
+    def test_saved_tabs_restore_once_with_saved_selection(self):
+        workspace.write_tabs(self.config, 'alice', ['https://one.example/', 'https://selected.example/'], active=1)
+        browser = WorkspaceBrowser('about:blank')
+
+        workspace.prepare_workspace(browser)
+        self.assertEqual(workspace.restore_tabs(browser, self.config, 'alice'), 2)
+        self.assertEqual(workspace.restore_tabs(browser, self.config, 'alice'), 2)
+
+        self.assertEqual(list(browser.pages.values()), ['https://one.example/', 'https://selected.example/'])
+        self.assertEqual(browser.pages[browser.current_window_handle], 'https://selected.example/')
+
+    def test_x_login_reuses_an_existing_x_tab(self):
+        browser = WorkspaceBrowser('https://other.example/', 'https://x.com/home')
+
+        workspace.select_x_login_tab(browser)
+
+        self.assertEqual(browser.pages, {'1': 'https://other.example/', '2': 'https://x.com/home'})
+        self.assertEqual(browser.current_window_handle, '2')
+
+    def test_x_login_uses_a_new_tab_when_all_open_pages_are_unrelated(self):
+        browser = WorkspaceBrowser('https://other.example/')
+
+        workspace.select_x_login_tab(browser)
+
+        self.assertEqual(browser.pages, {'1': 'https://other.example/', '2': 'about:blank'})
+        self.assertEqual(browser.current_window_handle, '2')
 
     def test_cookie_parser_accepts_all_sites_and_netscape_and_rejects_invalid_input(self):
         data='# Netscape HTTP Cookie File\n.example.org\tTRUE\t/\tTRUE\t0\tsession\tprepared-value\n'
@@ -128,3 +161,69 @@ class LaunchCancellationTests(unittest.IsolatedAsyncioTestCase):
                     ProfileLease.acquire(config,'alice',False)
                 gate.set();await asyncio.sleep(0.05)
                 lease=ProfileLease.acquire(config,'alice',False);lease.release()
+
+
+class ManualLoginWorkspaceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_manual_login_leaves_selected_native_page_in_place(self):
+        from xgenius.accounts.auth import AuthMixin
+        from xgenius.models import AccountCredentials
+
+        with tempfile.TemporaryDirectory() as directory:
+            auth = AuthMixin()
+            auth.config = Config(Path(directory))
+            auth.accounts = {}
+            auth.logger = SimpleNamespace(info=lambda *args: None)
+            browser = WorkspaceBrowser('https://native.example/')
+            browser._xg_browser_version = '128.0.0.0'
+            browser._xg_user_agent = 'Chrome/128.0.0.0'
+            browser._xg_proxy_ip = '203.0.113.24'
+            auth.browser_manager = SimpleNamespace(create_browser=AsyncMock(return_value=browser))
+
+            await auth.login_account(AccountCredentials('alice', '', auto_login=False, restore_tabs=True))
+
+            self.assertEqual(browser.pages, {'1': 'https://native.example/'})
+            self.assertEqual(auth.accounts['alice'].proxy_status, 'ok')
+
+
+class WorkspaceBrowser:
+    def __init__(self, *urls):
+        self.pages = {str(index): url for index, url in enumerate(urls, 1)}
+        self.next_id = len(urls) + 1
+        self.current_window_handle = '1'
+        self.switch_to = SimpleNamespace(window=self.select, new_window=lambda kind: self.create('about:blank'))
+
+    @property
+    def window_handles(self):
+        return list(self.pages)
+
+    def select(self, target):
+        self.current_window_handle = target
+
+    def create(self, url, background=False):
+        target = str(self.next_id)
+        self.next_id += 1
+        self.pages[target] = url
+        if not background:
+            self.select(target)
+        return target
+
+    def close(self):
+        self.pages.pop(self.current_window_handle)
+
+    def get(self, url):
+        self.pages[self.current_window_handle] = url
+
+    def execute_cdp_cmd(self, command, params):
+        if command == 'Target.getTargets':
+            return {'targetInfos': [
+                {'type': 'page', 'targetId': target, 'url': url} for target, url in self.pages.items()
+            ]}
+        if command == 'Target.createTarget':
+            return {'targetId': self.create(params['url'], params.get('background', False))}
+        if command == 'Target.closeTarget':
+            self.pages.pop(params['targetId'])
+            return {'success': True}
+        if command == 'Target.activateTarget':
+            self.select(params['targetId'])
+            return {}
+        raise AssertionError(command)

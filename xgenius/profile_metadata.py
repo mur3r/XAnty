@@ -16,7 +16,7 @@ DEFAULT_COLUMNS = list(COLUMNS[:9])
 TRACKED = ('username', 'profile_name', 'notes', 'tags', 'group', 'proxy', 'password',
            'auth_token', 'ct0_token', 'auto_login', 'browser_language', 'browser_timezone',
            'window_width', 'window_height', 'headless', 'profile_status', 'favorite')
-TRACKED += ('restore_tabs','extension_set','frame_color')
+TRACKED += ('restore_tabs','extension_set','icon_text')
 TRACKED += ('important','reminder_at','reminder_note')
 TRACKED += ('block_images','block_media','block_fonts','phishing_protection')
 SECRET_FIELDS = {'password', 'auth_token', 'ct0_token'}
@@ -43,9 +43,14 @@ def deadline(deleted_at, days):
 
 def metadata_values(data):
     if not isinstance(data, dict) or set(data) - {'profile_name', 'profile_status', 'favorite', 'tags', 'notes',
-                                               'important','reminder_at','reminder_note'}:
+                                               'important','reminder_at','reminder_note','icon_text'}:
         raise ValueError('Invalid profile metadata')
     result = dict(data)
+    if 'icon_text' in data:
+        text=data['icon_text']
+        if not isinstance(text,str) or len(text)>8 or any(ord(c)<32 or 0x7f<=ord(c)<0xa0 for c in text):
+            raise ValueError('Icon text must contain up to 8 printable characters')
+        result['icon_text']=text.strip()
     if 'profile_status' in data and data['profile_status'] not in STATUSES:
         raise ValueError('Invalid profile status')
     if 'favorite' in data and type(data['favorite']) is not bool:
