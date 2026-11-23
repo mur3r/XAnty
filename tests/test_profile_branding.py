@@ -12,7 +12,7 @@ class BrandingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             config=Config(Path(folder));identity=prepare_identity(config,'alice','Работа <script> & 12','stable',12,'РАБ12')
             profile=config.get_profile_dir('alice');prefs=profile/'Default/Preferences'
-            data=json.loads(prefs.read_text());data['extensions']={'pinned_extensions':['existing']};prefs.write_text(json.dumps(data))
+            data=json.loads(prefs.read_text(encoding='utf-8'));data['extensions']={'pinned_extensions':['existing']};prefs.write_text(json.dumps(data),encoding='utf-8')
             extension=prepare_branding(profile,identity)
             manifest=json.loads((extension/'manifest.json').read_text(encoding='utf-8'))
             self.assertNotIn('permissions',manifest);self.assertNotIn('host_permissions',manifest)
@@ -22,5 +22,6 @@ class BrandingTests(unittest.TestCase):
             self.assertIn('Работа &lt;script&gt; &amp; 12',html);self.assertNotIn('<script>',html)
             self.assertEqual((extension/'icon32.png').read_bytes()[:8],b'\x89PNG\r\n\x1a\n')
             prepare_branding(profile,identity)
-            pinned=json.loads(prefs.read_text())['extensions']['pinned_extensions']
-            self.assertEqual(pinned,['existing',EXTENSION_ID])
+            saved=json.loads(prefs.read_text(encoding='utf-8'))
+            self.assertEqual(saved['extensions']['pinned_extensions'],['existing',EXTENSION_ID])
+            self.assertEqual(saved['profile']['name'],identity.name)
