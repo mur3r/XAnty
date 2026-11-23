@@ -34,11 +34,11 @@ const ProfileTools=(()=>{
  }
  async function diagnostics(username){
   const d=Dialogs.open({title:'network_diagnostics',icon:'activity',wide:true,body:`<p class="hint">${t('diagnostics_hint')}</p><div class="diagnostic-result"><div class="notice"><span class="spinner"></span> ${t('diagnostics_running')}</div></div>`,buttons:[{label:'close',kind:'ghost',onClick:d=>d.close()}]});
-  try{const data=await api('POST',toolPath(username,'diagnostics'),{});if(!d.el.isConnected)return;
+  try{const data=await api('POST',toolPath(username,'diagnostics'),{});if(d.closed||!d.el.isConnected)return;
    const rtc=data.webrtc||{},dns=data.dns||{};
    const badge=status=>`<span class="status-pill ${status==='warning'?'error':status==='matched'?'ok':''}">${t('diagnostic_'+status)}</span>`;
    $('.diagnostic-result',d.body).innerHTML=`<div class="diagnostic-card"><h3>${t('browser_ip')}</h3><p class="mono">${esc(data.ip||t('diagnostic_inconclusive'))}</p>${data.ip_mismatch?`<div class="notice warning">${t('browser_ip_changed')}</div>`:''}</div><div class="diagnostic-card"><h3>WebRTC ${badge(rtc.status)}</h3><p class="mono">${esc((rtc.public_ips||[]).join(', ')||'—')}</p>${rtc.mismatches?.length?`<div class="notice warning">${t('rtc_mismatch')}: ${esc(rtc.mismatches.join(', '))}</div>`:''}<p class="hint">${t('rtc_hint')}</p></div><div class="diagnostic-card"><h3>DNS ${badge(dns.status)}</h3><p class="hint">${t('dns_lookups',{n:dns.lookups||0,total:dns.expected||0})}</p>${(dns.resolvers||[]).map(r=>`<p class="mono">${esc([r.ip,r.operator||r.org,r.country,r.hostname].filter(Boolean).join(' · '))}</p>`).join('')}<p class="hint">${esc(dns.detail||'')}</p><p class="hint">${t('dns_hint')}</p></div>`;
-  }catch(error){if(d.el.isConnected){$('.diagnostic-result',d.body).innerHTML=`<div class="notice warning">${t('diagnostics_unavailable')}</div>`;d.error(error.message);}}
+  }catch(error){if(!d.closed&&d.el.isConnected){$('.diagnostic-result',d.body).innerHTML=`<div class="notice warning">${t('diagnostics_unavailable')}</div>`;d.error(error.message);}}
  }
  async function clearCache(username){
   if(!await Dialogs.confirm('clear_cache',t('clear_cache_question'),'clear_cache','danger'))return;

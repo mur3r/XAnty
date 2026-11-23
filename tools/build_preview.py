@@ -11,7 +11,7 @@ STATIC = Path(__file__).resolve().parent.parent / "xgenius" / "web" / "static"
 
 def build() -> Path:
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    for name in ("style.css", "design-system.css", "profiles-screen.css", "premium-surfaces.css"):
+    for name in ("style.css", "design-system.css", "profiles-screen.css", "premium-surfaces.css", "motion.css"):
         css = (STATIC / name).read_text(encoding="utf-8")
         html = html.replace(f'<link rel="stylesheet" href="{name}">', f"<style>\n{css}\n</style>")
 

@@ -1,0 +1,33 @@
+name: UI checks
+on:
+  push:
+    branches: [feature/premium-purple-redesign]
+  pull_request:
+    paths:
+      - 'xgenius/web/static/**'
+      - 'tests/*ui*'
+      - 'tests/test_design_system.py'
+      - 'tools/build_preview.py'
+      - '.github/workflows/ui-checks.yml'
+permissions:
+  contents: read
+jobs:
+  interface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: JavaScript behavior and syntax
+        run: |
+          node --test tests/profile_management_ui.test.js tests/workspace_operations_ui.test.js tests/updates_ui.test.js tests/proxy_rotation_ui.test.js tests/profiles_screen_ui.test.js tests/premium_surfaces_ui.test.js tests/motion_ui.test.js
+          node tests/test_profile_ui.cjs
+          for file in xgenius/web/static/*.js; do node --check "$file"; done
+      - name: Theme tokens and static preview
+        run: python -m unittest tests.test_design_system -q

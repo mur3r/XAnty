@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 
-function environment({pending=true,notes='## Added\n- Scrolling notes\n- Offline access',release=null}={}){
+function environment({pending=true,notes='## Added\n- Scrolling notes\n- Offline access',release=null,keepClosedConnected=false}={}){
  const events=new Map(),calls=[],dialogs=[],toasts=[];
  let data={configured:true,current_version:'2026.11.23.3',status:'current',release,
   installed_release:{version:'2026.11.23.3',notes,pending}};
@@ -18,7 +18,7 @@ function environment({pending=true,notes='## Added\n- Scrolling notes\n- Offline
   },Dialogs:{open(options){
    const elements={'.modal-body':{scrollTop:0},'[data-installed-notes]':{innerHTML:''},
     '[data-update-body]':{innerHTML:'',insertAdjacentHTML(_,html){this.innerHTML=html+this.innerHTML;}}};
-   const d={options,el:{isConnected:true,elements},body:{elements},close(){this.el.isConnected=false;options.onClose?.();}};
+   const d={options,el:{isConnected:true,elements},body:{elements},close(){this.closed=true;if(!keepClosedConnected)this.el.isConnected=false;options.onClose?.();}};
    dialogs.push(d);return d;
   }}});
  vm.runInContext(fs.readFileSync('xgenius/web/static/updates.js','utf8'),c);
@@ -60,4 +60,10 @@ test('available release preview uses readable headings and lists without trustin
  const html=e.dialogs[0].body.elements['[data-update-body]'].innerHTML;
  assert.match(html,/release-preview/);assert.match(html,/<h3>&lt;img/);assert.match(html,/<li>&lt;script/);
  assert.doesNotMatch(html,/<img|<script>/);assert.match(html,/data-update-check/);
+});
+
+test('updates reopen immediately while the old dialog is finishing its exit animation',async()=>{
+ const e=environment({pending:false,keepClosedConnected:true});await e.start();await e.show();
+ const old=e.dialogs[0];old.close();assert.equal(old.el.isConnected,true);assert.equal(old.closed,true);
+ await e.show();assert.equal(e.dialogs.length,2);assert.notEqual(e.dialogs[1],old);
 });

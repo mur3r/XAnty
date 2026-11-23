@@ -1,0 +1,51 @@
+/* Motion is limited to individual controls, overlays and active surfaces. */
+:root { --motion-fast: 150ms; --motion-normal: 180ms; --motion-exit: 160ms; --motion-slow: 220ms; --motion-progress-from: 1; --motion-exit-opacity: 1; }
+.btn,.icon-button,.rail-button,.folder-tab,.transfer-option,.row-options summary,.text-button {
+  transition-duration: var(--motion-normal);
+  transition-timing-function: var(--ease-out);
+}
+.btn,.icon-button,.rail-button,.folder-tab,.transfer-option,.row-options summary {
+  transition-property: transform,opacity,background-color,border-color,color,box-shadow;
+}
+.btn:active:not(:disabled),.icon-button:active:not(:disabled),.rail-button:active:not(:disabled),.transfer-option:active:not(:disabled) { transform: translateY(1px) scale(.985); }
+.btn:disabled,.icon-button:disabled { transform: none; }
+@media (hover:hover) {
+  .header-actions .btn:hover:not(:disabled),.modal-foot .btn.primary:hover:not(:disabled),.transfer-option:hover:not(:disabled) { transform: translateY(-1px); }
+}
+.auto-switch { transition: background-color var(--motion-normal) var(--ease-standard); }
+.auto-switch > i { transition: transform var(--motion-normal) var(--ease-out),background-color var(--motion-normal) var(--ease-standard); }
+.auto-switch:active:not(:disabled) > i { opacity: .8; }
+.status-pill,.proxy-check,.start-button { transition: background-color var(--motion-normal) var(--ease-standard),border-color var(--motion-normal) var(--ease-standard),color var(--motion-normal) var(--ease-standard),opacity var(--motion-normal) var(--ease-standard),transform var(--motion-fast) var(--ease-out); }
+.btn:has(.spinner):disabled,.proxy-check:has(.spinner):disabled { opacity: 1; cursor: progress; }
+.profiles-view .start-button:has(.spinner) { box-shadow: none; }
+.motion-enter-view { animation: xanty-enter-view var(--motion-normal) var(--ease-out); }
+.motion-enter-startup { animation: xanty-enter-startup var(--motion-slow) var(--ease-out); }
+.motion-enter-banner { animation: xanty-enter-banner var(--motion-normal) var(--ease-out); }
+.motion-enter-dialog { animation: xanty-enter-overlay var(--motion-normal) var(--ease-out); }
+.motion-enter-dialog > .premium-dialog { animation: xanty-enter-dialog var(--motion-normal) var(--ease-out); }
+.motion-enter-dialog.release-screen > .premium-dialog { animation-name: xanty-enter-view; }
+.motion-enter-menu { animation: xanty-enter-menu var(--motion-fast) var(--ease-out); transform-origin: top right; }
+.motion-enter-toast { animation: xanty-enter-toast var(--motion-normal) var(--ease-out); }
+.motion-exit,.motion-exit * { pointer-events: none !important; }
+.modal-overlay.motion-exit { animation: xanty-exit-overlay var(--motion-exit) var(--ease-standard) forwards; }
+.modal-overlay.motion-exit > .premium-dialog { animation: xanty-exit-dialog var(--motion-exit) var(--ease-standard) forwards; }
+.modal-overlay.motion-exit.release-screen > .premium-dialog { animation-name: xanty-exit-overlay; }
+.toast.motion-exit { animation: xanty-exit-toast var(--motion-exit) var(--ease-standard) forwards; }
+.progress-track > i { transform-origin: left center; transition: width var(--motion-normal) var(--ease-standard); }
+.progress-track > i.motion-enter-progress { animation: xanty-enter-progress var(--motion-normal) var(--ease-out); }
+@keyframes xanty-enter-view { from { opacity: .65; } to { opacity: 1; } }
+@keyframes xanty-enter-startup { from { opacity: .55; } to { opacity: 1; } }
+@keyframes xanty-enter-banner { from { opacity: .5; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@keyframes xanty-enter-overlay { from { opacity: .4; } to { opacity: 1; } }
+@keyframes xanty-enter-dialog { from { transform: translateY(6px) scale(.99); } to { transform: none; } }
+@keyframes xanty-enter-menu { from { opacity: .45; transform: translateY(-3px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes xanty-enter-toast { from { opacity: .35; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes xanty-exit-overlay { from { opacity: var(--motion-exit-opacity,1); } to { opacity: 0; } }
+@keyframes xanty-exit-dialog { to { transform: translateY(3px) scale(.995); } }
+@keyframes xanty-exit-toast { from { opacity: var(--motion-exit-opacity,1); } to { opacity: 0; transform: translateY(4px); } }
+@keyframes xanty-enter-progress { from { transform: scaleX(var(--motion-progress-from,1)); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion:reduce) {
+  :root { --motion-fast: 0ms; --motion-normal: 0ms; --motion-exit: 0ms; --motion-slow: 0ms; }
+  *,*::before,*::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .btn,.icon-button,.rail-button,.transfer-option { transform: none !important; }
+}
