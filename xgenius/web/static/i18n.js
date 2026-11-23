@@ -1,6 +1,12 @@
 'use strict';
 const I18N = (() => {
   const rows = `
+whats_new|Что нового|What's new|Що нового
+release_notes_title|Что нового в XAnty|What's new in XAnty|Що нового в XAnty
+release_notes_intro|Посмотрите, что изменилось в этой версии. Список можно прокручивать.|See what changed in this version. Scroll to read more.|Перегляньте зміни в цій версії. Список можна прокручувати.
+release_notes_continue|Продолжить работу|Continue to workspace|Продовжити роботу
+release_notes_hint|Вернуться к этому списку можно в разделе «Обновления».|You can reopen these notes from Updates.|Повернутися до цього списку можна в розділі «Оновлення».
+release_notes_saved|Описание установленной версии доступно и без интернета.|Installed release notes are available offline.|Опис установленої версії доступний і без інтернету.
 profile_icon_text|Текст значка|Icon text|Текст піктограми
 profile_icon_auto|Из названия профиля|From profile name|Із назви профілю
 profile_icon_hint|До 8 символов на самой иконке. Короткий текст крупнее и легче читается. Применяется при следующем запуске профиля.|Up to 8 characters on the icon itself. Short text is larger and easier to read. Applied on next profile launch.|До 8 символів на самій піктограмі. Короткий текст більший і легше читається. Застосовується під час наступного запуску профілю.

@@ -134,6 +134,18 @@ class WebApp(WorkspaceApiMixin):
     async def api_updates(self, request):
         return self._json(self.updates.snapshot())
 
+    async def api_release_notes_seen(self, request):
+        body = await request.json()
+        self.updates.release_notes.acknowledge(body.get('version'))
+        return self._json(self.updates.snapshot())
+
+    async def api_release_notes_open(self, request):
+        if self.desktop_mode:
+            import webview
+            if webview.windows:
+                await asyncio.to_thread(webview.windows[0].maximize)
+        return self._json({'ok': True})
+
     async def api_update_check(self, request):
         body = await request.json() if request.can_read_body else {}
         return self._json(await self.updates.check(automatic=body.get('automatic') is True))
@@ -590,6 +602,8 @@ class WebApp(WorkspaceApiMixin):
             web.get("/api/preferences", self.api_preferences),
             web.put("/api/preferences", self.api_preferences),
             web.get('/api/updates', self.api_updates),
+            web.post('/api/updates/notes/seen', self.api_release_notes_seen),
+            web.post('/api/updates/notes/open', self.api_release_notes_open),
             web.post('/api/updates/check', self.api_update_check),
             web.post('/api/updates/download', self.api_update_download),
             web.post('/api/updates/install', self.api_update_install),

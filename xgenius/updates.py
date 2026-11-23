@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from xgenius import __version__
 from xgenius.config import application_home
+from xgenius.release_notes import ReleaseNotes
 
 CHECK_INTERVAL = 24 * 60 * 60
 MAX_DOWNLOAD = 1024 * 1024 * 1024
@@ -153,6 +154,7 @@ def supports_install():
 class UpdateManager:
     def __init__(self):
         self.config = read_update_config()
+        self.release_notes = ReleaseNotes(self.config['repository'])
         self.release = None
         self.status = 'idle' if self.config['repository'] else 'unconfigured'
         self.error = ''
@@ -185,7 +187,7 @@ class UpdateManager:
         result = {'configured': bool(self.config['repository']), 'repository': self.config['repository'],
                   'current_version': __version__, 'status': self.status, 'release': self.release,
                   'error': self.error, 'last_checked': self.last_checked, 'downloaded': self.downloaded,
-                  'can_install': supports_install()}
+                  'can_install': supports_install(), 'installed_release': self.release_notes.snapshot()}
         try:
             result['install_result'] = json.loads((self.root / 'result.json').read_text(encoding='utf-8-sig'))
         except (OSError, ValueError):
