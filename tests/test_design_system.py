@@ -36,12 +36,12 @@ class DesignSystemTests(unittest.TestCase):
                     self.assertGreaterEqual(contrast(palette['--color-on-primary'], palette[background]), 4.5)
 
     def test_every_referenced_css_token_is_defined(self):
-        css = '\n'.join((STATIC / name).read_text(encoding='utf-8') for name in ('style.css', 'design-system.css', 'profiles-screen.css'))
+        css = '\n'.join((STATIC / name).read_text(encoding='utf-8') for name in ('style.css', 'design-system.css', 'profiles-screen.css', 'premium-surfaces.css'))
         declared = set(re.findall(r'(--[\w-]+)\s*:', css))
         referenced = set(re.findall(r'var\((--[\w-]+)', css))
         self.assertEqual(referenced - declared, set())
 
-    def test_preview_inlines_both_stylesheets_and_preserves_the_live_assets(self):
+    def test_preview_inlines_all_stylesheets_and_preserves_the_live_assets(self):
         spec = importlib.util.spec_from_file_location('premium_preview', ROOT / 'tools/build_preview.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

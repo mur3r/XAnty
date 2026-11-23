@@ -625,3 +625,14 @@ ops_phase_verifying|Проверка копии|Verifying backup|Перевір�
 `;
  for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
 }
+
+{
+ const rows=`
+ui_identity|Основное|Identity|Основне
+ui_organization|Организация и заметки|Organization and notes|Організація та нотатки
+ui_network|Прокси и сеть|Proxy and network|Проксі та мережа
+ui_session|Вход и сессия|Login and session|Вхід і сесія
+ui_browser_behavior|Поведение браузера|Browser behavior|Поведінка браузера
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}
