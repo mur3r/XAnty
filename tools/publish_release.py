@@ -22,9 +22,7 @@ def publish():
     notes = (ROOT / 'xgenius/web/static/release-notes.md').read_text(encoding='utf-8').strip()
     if not notes:
         raise RuntimeError('Release notes must describe the published update.')
-    download_base = f'https://github.com/{repository}/releases/download/{tag}'
-    release_body = (f'**Установщик:** [XAnty-Setup.exe]({download_base}/XAnty-Setup.exe)\n\n'
-                    f'**Отдельный EXE:** [XAnty.exe]({download_base}/XAnty.exe)\n\n'
+    release_body = ('Установщик: XAnty-Setup.exe. Отдельный EXE: XAnty.exe.\n\n'
                     'Обновления при запуске устанавливаются автоматически. Профили и настройки сохраняются.\n\n'
                     + notes)
     directory = ROOT / 'dist/release'
