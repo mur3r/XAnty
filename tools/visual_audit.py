@@ -38,8 +38,6 @@ def screenshot(page, name, embed=False):
       return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:innerWidth,height:innerHeight,
         bodyWidth:body.clientWidth,bodyScroll:body.scrollWidth};
     })""")
-    assert all(g['left'] >= -1 and g['right'] <= g['width'] + 1 and g['top'] >= -1
-               and g['bottom'] <= g['height'] + 1 and g['bodyScroll'] <= g['bodyWidth'] + 1 for g in geometry), geometry
     path = OUTPUT / (name + '.jpg')
     page.screenshot(path=str(path), type='jpeg', quality=65, animations='disabled')
     IMAGES.append(path)
@@ -51,6 +49,8 @@ def screenshot(page, name, embed=False):
         for i in range(0, len(data), 4096):
             print(f'VISUAL_IMAGE_CHUNK {path.name} {i // 4096} {data[i:i + 4096]}', flush=True)
         print('VISUAL_IMAGE_END ' + path.name, flush=True)
+    assert all(g['left'] >= -1 and g['right'] <= g['width'] + 1 and g['top'] >= -1
+               and g['bottom'] <= g['height'] + 1 and g['bodyScroll'] <= g['bodyWidth'] + 1 for g in geometry), geometry
 
 
 def modal(page):
@@ -138,7 +138,10 @@ def audit_file_control(page):
     field.set_input_files(dict(name='QA-довга-назва.xanty', mimeType='application/zip', buffer=b'synthetic, not an imported archive'))
     expect(control.locator('[data-file-name]')).to_have_text('QA-довга-назва.xanty')
     field.focus()
-    assert control.evaluate("el=>getComputedStyle(el).outlineStyle") != 'none'
+    page.keyboard.press('Tab')
+    page.keyboard.press('Shift+Tab')
+    expect(field).to_be_focused()
+    assert control.evaluate("el=>getComputedStyle(el).outlineStyle") != 'none', 'file control lacks a visible keyboard focus ring'
     field.set_input_files([])
     expect(control.locator('[data-file-name]')).to_have_text(page.evaluate("t('quality_file_empty')"))
 
@@ -338,7 +341,7 @@ def main():
                             assert not errors, errors
                             RESULTS.append(dict(case=label, ok=True, scale=scale, elapsed=round(time.perf_counter()-started, 2)))
                         except Exception as error:
-                            ERRORS.append(dict(case=label, error=str(error).split('Aria snapshot:')[0][:2400], console=errors))
+                            ERRORS.append(dict(case=label, error=(type(error).__name__ + ': ' + str(error).split('Aria snapshot:')[0])[:2400], console=errors))
                             try:
                                 screenshot(page, label + '-FAILED', embed=len(ERRORS) <= 2)
                             except Exception:
@@ -360,7 +363,7 @@ def main():
                 expect(page.locator('#rows tr')).to_have_count(1)
                 RESULTS.append(dict(case='5000-profiles', ok=True, elapsed=round(time.perf_counter()-started, 2)))
             except Exception as error:
-                ERRORS.append(dict(case='5000-profiles', error=str(error).split('Aria snapshot:')[0][:2400]))
+                ERRORS.append(dict(case='5000-profiles', error=(type(error).__name__ + ': ' + str(error).split('Aria snapshot:')[0])[:2400]))
             finally:
                 if context:
                     context.close()
@@ -381,7 +384,7 @@ def main():
                 assert page.locator('.header-actions .btn').first.evaluate("el=>getComputedStyle(el).transitionDuration") != '0s'
                 RESULTS.append(dict(case='runtime-reduced-motion', ok=True))
             except Exception as error:
-                ERRORS.append(dict(case='runtime-reduced-motion', error=str(error).split('Aria snapshot:')[0][:2400]))
+                ERRORS.append(dict(case='runtime-reduced-motion', error=(type(error).__name__ + ': ' + str(error).split('Aria snapshot:')[0])[:2400]))
             finally:
                 if context:
                     context.close()
