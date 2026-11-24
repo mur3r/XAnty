@@ -645,3 +645,11 @@ quality_proxy_error|Ошибка прокси|Proxy error|Помилка про�
 `;
  for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
 }
+
+{
+ const rows=`
+quality_file_choose|Выбрать файл|Choose file|Вибрати файл
+quality_file_empty|Файл не выбран|No file selected|Файл не вибрано
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}

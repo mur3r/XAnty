@@ -33,6 +33,13 @@ def settle(page):
 
 def screenshot(page, name, embed=False):
     settle(page)
+    geometry = page.locator('.modal-overlay:not([inert]) [role="dialog"]').evaluate_all("""els=>els.map(el=>{
+      const box=el.getBoundingClientRect(),body=el.querySelector('.modal-body');
+      return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:innerWidth,height:innerHeight,
+        bodyWidth:body.clientWidth,bodyScroll:body.scrollWidth};
+    })""")
+    assert all(g['left'] >= -1 and g['right'] <= g['width'] + 1 and g['top'] >= -1
+               and g['bottom'] <= g['height'] + 1 and g['bodyScroll'] <= g['bodyWidth'] + 1 for g in geometry), geometry
     path = OUTPUT / (name + '.jpg')
     page.screenshot(path=str(path), type='jpeg', quality=65, animations='disabled')
     IMAGES.append(path)
@@ -77,6 +84,8 @@ def audit_dimensions(page):
     assert box['scroll'] <= box['width'] + 1, f'document horizontal overflow: {box}'
     assert box['tableRows'] == 50, box
     assert box['missingLabels'] == 0, box
+    expect(page.locator('.app-footer [data-update-open]')).to_be_visible()
+    expect(page.locator('.app-footer [data-tool="stop_all"]')).to_be_visible()
     for selector in ['#f-profile-status', '#f-status', '#f-proxy', '#profile-sort']:
         size = page.locator(selector).evaluate("""el => {
           const style=getComputedStyle(el),ctx=new OffscreenCanvas(1,1).getContext('2d');
@@ -118,6 +127,20 @@ def audit_editor(page, name, embed=False, nested=False):
     page.keyboard.press('Shift+Tab')
     assert page.evaluate("document.activeElement.closest('.modal-foot')!==null"), 'reverse focus trap failed'
     close_modal(page)
+
+
+def audit_file_control(page):
+    active = modal(page)
+    control = active.locator('.file-control')
+    expect(control.locator('.file-control-action')).to_have_text(page.evaluate("t('quality_file_choose')"))
+    expect(control.locator('[data-file-name]')).to_have_text(page.evaluate("t('quality_file_empty')"))
+    field = control.locator('input[type=file]')
+    field.set_input_files(dict(name='QA-довга-назва.xanty', mimeType='application/zip', buffer=b'synthetic, not an imported archive'))
+    expect(control.locator('[data-file-name]')).to_have_text('QA-довга-назва.xanty')
+    field.focus()
+    assert control.evaluate("el=>getComputedStyle(el).outlineStyle") != 'none'
+    field.set_input_files([])
+    expect(control.locator('[data-file-name]')).to_have_text(page.evaluate("t('quality_file_empty')"))
 
 
 def full_flow(page, label):
@@ -214,6 +237,7 @@ def full_flow(page, label):
     screenshot(page, label + '-transfer')
     modal(page).locator('[data-import-package]').click()
     expect(modal(page).locator('[name="duplicates"] option')).to_have_count(2)
+    audit_file_control(page)
     screenshot(page, label + '-package')
     close_modal(page)
     page.locator('[data-tool="columns"]').click()
@@ -240,6 +264,11 @@ def full_flow(page, label):
     row.locator('[data-act="cookies"]').click()
     expect(modal(page).locator('.cookie-json')).to_contain_text('synthetic')
     screenshot(page, label + '-cookies')
+    close_modal(page)
+    row.locator('.row-options summary').click()
+    row.locator('[data-act="cookies_import"]').click()
+    audit_file_control(page)
+    screenshot(page, label + '-cookie-import')
     close_modal(page)
     page.locator('.rail [data-tab="transfers"]').click()
     expect(page.locator('.job-card')).to_have_count(2)
