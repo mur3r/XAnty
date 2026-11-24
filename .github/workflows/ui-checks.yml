@@ -26,7 +26,7 @@ jobs:
           python-version: '3.12'
       - name: JavaScript behavior and syntax
         run: |
-          node --test tests/profile_management_ui.test.js tests/workspace_operations_ui.test.js tests/updates_ui.test.js tests/proxy_rotation_ui.test.js tests/profiles_screen_ui.test.js tests/premium_surfaces_ui.test.js tests/motion_ui.test.js
+          node --test tests/*.test.js
           node tests/test_profile_ui.cjs
           for file in xgenius/web/static/*.js; do node --check "$file"; done
       - name: Theme tokens and static preview
@@ -45,6 +45,7 @@ jobs:
       - name: Install project test dependencies
         run: python -m pip install -r requirements.txt -r requirements-build.txt
       - name: Existing Python regression suite
-        run: python -m unittest discover -s tests -q
+        run: >-
+          python -c "import os, pathlib, tempfile, unittest, sys; test_root=pathlib.Path(os.environ['RUNNER_TEMP'])/'xanty-tests'; test_root.mkdir(exist_ok=True); tempfile.tempdir=str(test_root.resolve()); result=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.discover('tests')); sys.exit(not result.wasSuccessful())"
       - name: Python syntax
         run: python -m compileall -q xgenius tools

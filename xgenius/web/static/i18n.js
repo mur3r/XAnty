@@ -429,6 +429,7 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   function localize(root = document) {
     root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
     root.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+    root.querySelectorAll('[data-i18n-aria-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
     root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
     root.querySelectorAll('[data-language]').forEach(el => { el.value = language; });
   }
@@ -633,6 +634,14 @@ ui_organization|Организация и заметки|Organization and notes|
 ui_network|Прокси и сеть|Proxy and network|Проксі та мережа
 ui_session|Вход и сессия|Login and session|Вхід і сесія
 ui_browser_behavior|Поведение браузера|Browser behavior|Поведінка браузера
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}
+
+{
+ const rows=`
+quality_navigation|Папки и язык|Folders and language|Папки та мова
+quality_proxy_error|Ошибка прокси|Proxy error|Помилка проксі
 `;
  for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
 }

@@ -11,16 +11,17 @@ function element(){
   addEventListener(k,fn){if(!events.has(k))events.set(k,new Set());events.get(k).add(fn);},
   removeEventListener(k,fn){events.get(k)?.delete(fn);},
   emit(k,target=this,animationName){for(const fn of [...events.get(k)||[]])fn({target,animationName});},
-  setAttribute(k,v){attributes[k]=v;},remove(){this.isConnected=false;},focus(){this.focused=true;},
+  emitEvent(k,event){for(const fn of [...events.get(k)||[]])fn(event);},scrollIntoView(){this.scrolled=true;},setAttribute(k,v){attributes[k]=v;},remove(){this.isConnected=false;},focus(){this.focused=true;},
   append(){},querySelector(){return null;},querySelectorAll(){return [];}};
 }
 function environment(reduced=false,dialogs=false){
  const timers=new Map(),changes=new Map();let timerId=0;
  const media={matches:reduced,addEventListener:(key,fn)=>changes.set(key,fn)};
- const body=element(),foot=element(),close=element(),modal=element(),root=element(),previous=element();
+ const body=element(),foot=element(),close=element(),modal=element(),root=element(),previous=element(),main=element(),toggle=element(),error=element(),overlays=[];
+ root.append=el=>overlays.push(el);
  let overlay;
- const document={activeElement:previous,addEventListener(){},querySelector:s=>s==='#modal-root'?root:null,
-  createElement(tag){const el=element();if(tag==='div'){overlay=el;el.querySelector=s=>({'.modal-body':body,'.modal-foot':foot,'[data-close]':close,'.modal':modal}[s]||null);}return el;}};
+ const document={activeElement:previous,addEventListener(){},querySelector:s=>s==='#modal-root'?root:s==='#screen-main'?main:s==='#btn-sidebar-toggle'?toggle:s==='#dialog-title'&&overlays.some(el=>el.isConnected&&el.innerHTML.includes('id="dialog-title"'))?{}:null,
+  createElement(tag){const el=element();if(tag==='div'){overlay=el;el.querySelector=s=>({'.modal-body':body,'.modal-foot':foot,'[data-close]':close,'.modal':modal,'[data-error]':error}[s]||null);}return el;}};
  const c=vm.createContext({document,matchMedia:()=>media,Map,Set,console,
   setTimeout:(fn,ms)=>{timers.set(++timerId,{fn,ms});return timerId;},clearTimeout:id=>timers.delete(id),
   I:()=>'',t:key=>key,esc:String,I18N:{localize(){},error:String}});
@@ -28,7 +29,7 @@ function environment(reduced=false,dialogs=false){
  if(dialogs)vm.runInContext(fs.readFileSync('xgenius/web/static/dialogs.js','utf8'),c);
  const run=code=>vm.runInContext(code,c);
  if(dialogs)run('globalThis.$=(s,root=document)=>root.querySelector(s);globalThis.$$=(s,root=document)=>root.querySelectorAll(s);globalThis.motionEnter=(el,kind)=>Motion.enter(el,kind);globalThis.motionExit=el=>Motion.exit(el);globalThis.closedCount=0;');
- return {c,run,timers,media,previous,getOverlay:()=>overlay,
+ return {c,run,timers,media,previous,main,toggle,error,getOverlay:()=>overlay,
   reduce(){media.matches=true;changes.get('change')();},
   flush(){for(const [id,task]of [...timers]){timers.delete(id);task.fn();}}};
 }
@@ -115,4 +116,30 @@ test('closing during entrance starts from current opacity instead of flashing at
  e.run('Motion.enter(node,"dialog");Motion.exit(node)');
  assert.equal(e.c.node.properties['--motion-exit-opacity'],'0.63');assert.equal(e.c.node.inert,true);
  e.flush();
+});
+
+test('nested dialogs isolate the background, retain unique labels and restore the previous layer',()=>{
+ const e=environment(false,true);
+ e.run('globalThis.first=Dialogs.open({title:"first",body:""});globalThis.second=Dialogs.open({title:"second",body:""})');
+ assert.equal(e.main.inert,true);assert.equal(e.run('first.el.inert'),true);assert.equal(e.run('second.el.inert'),false);
+ assert.match(e.run('first.el.innerHTML'),/id="dialog-title"/);
+ assert.match(e.run('second.el.innerHTML'),/aria-labelledby="dialog-title-1"/);
+ e.run('second.close()');assert.equal(e.run('first.el.inert'),false);assert.equal(e.main.inert,true);
+ e.run('first.close()');assert.equal(e.main.inert,false);e.flush();
+});
+test('modal forms prevent implicit navigation and errors become visible and focusable',()=>{
+ const e=environment(false,true);e.run('globalThis.d=Dialogs.open({title:"folder",body:"<form></form>"})');
+ let prevented=false;e.getOverlay().emitEvent('submit',{preventDefault(){prevented=true;}});
+ assert.equal(prevented,true);e.run('d.error("Validation failed")');
+ assert.equal(e.error.textContent,'Validation failed');assert.equal(e.error.scrolled,true);assert.equal(e.error.focused,true);
+ assert.equal(e.error.attributes.tabindex,'-1');e.run('d.close()');e.flush();
+});
+test('closing a dialog opened from collapsed navigation restores a visible fallback',()=>{
+ const e=environment(false,true);e.run('globalThis.d=Dialogs.open({title:"folder",body:""})');
+ e.previous.getClientRects=()=>[];e.run('d.close()');assert.equal(e.toggle.focused,true);e.flush();
+});
+
+test('late dialog errors cannot steal keyboard focus after the dialog was closed',()=>{
+ const e=environment(false,true);e.run('globalThis.d=Dialogs.open({title:"test",body:""});d.close();d.error("Late response")');
+ assert.notEqual(e.error.focused,true);assert.notEqual(e.error.textContent,'Late response');e.flush();
 });

@@ -36,7 +36,7 @@ class DesignSystemTests(unittest.TestCase):
                     self.assertGreaterEqual(contrast(palette['--color-on-primary'], palette[background]), 4.5)
 
     def test_every_referenced_css_token_is_defined(self):
-        css = '\n'.join((STATIC / name).read_text(encoding='utf-8') for name in ('style.css', 'design-system.css', 'profiles-screen.css', 'premium-surfaces.css', 'motion.css'))
+        css = '\n'.join((STATIC / name).read_text(encoding='utf-8') for name in ('style.css', 'design-system.css', 'profiles-screen.css', 'premium-surfaces.css', 'motion.css', 'interface-quality.css'))
         declared = set(re.findall(r'(--[\w-]+)\s*:', css))
         referenced = set(re.findall(r'var\((--[\w-]+)', css))
         self.assertEqual(referenced - declared, set())
