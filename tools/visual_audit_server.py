@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import math
+import sys
 from pathlib import Path
 
 from aiohttp import web
@@ -52,7 +53,7 @@ class Fixture:
         self.workspace = dict(
             chromium=dict(installed=[dict(version='bundled', selected=True, available=True),
                                      dict(version='130.0.6723.58', available=True)]),
-            backups=dict(enabled=True, directory='D:/Demo/Backups', interval_hours=24, keep=7, last_status='success',
+            backups=dict(enabled=True, directory='D:/Demo/Backups', interval_hours=24, keep=7, last_status='completed',
                          last_success_at='2026-11-23T10:00:00Z', next_due_at='2026-11-24T10:00:00Z'),
             window_sets=[dict(id='qa-set', name='Робочі профілі', usernames=['qa_001', 'qa_002'], missing=[])],
             errors=[dict(username='qa_002', profile_name='Команда 003', category='proxy', detail='Synthetic connection timeout')])
@@ -227,5 +228,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=18769)
     args = parser.parse_args()
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     web.run_app(create_app(), host='127.0.0.1', port=args.port,
                 print=lambda _: print(f'READY http://127.0.0.1:{args.port}', flush=True), access_log=None)

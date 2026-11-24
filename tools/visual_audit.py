@@ -36,6 +36,8 @@ def screenshot(page, name, embed=False):
     path = OUTPUT / (name + '.jpg')
     page.screenshot(path=str(path), type='jpeg', quality=65, animations='disabled')
     IMAGES.append(path)
+    embed = embed or (name.startswith('dark-ru-laptop-') and not name.endswith('-profiles')) or name in [
+        'light-en-desktop-workspace', 'light-en-desktop-monitor', 'dark-uk-narrow-workspace']
     if embed:
         data = base64.b64encode(path.read_bytes()).decode('ascii')
         print('VISUAL_IMAGE_BEGIN ' + path.name, flush=True)
@@ -108,6 +110,7 @@ def audit_editor(page, name, embed=False, nested=False):
         page.wait_for_function("document.querySelectorAll('.modal-overlay').length===1")
     # Screenshot the first two visual groups after testing the bottom of the form.
     active.locator('[name="profile_name"]').focus()
+    active.locator('.modal-body').evaluate('el=>el.scrollTop=0')
     screenshot(page, name, embed)
     active.locator('.modal-foot button').last.focus()
     page.keyboard.press('Tab')
@@ -141,6 +144,7 @@ def full_flow(page, label):
     expect(page.locator('#sel-count')).to_contain_text('120')
     page.locator('[data-tool="bulk_edit"]').click()
     expect(modal(page).locator('[name]')).to_have_count(16)
+    screenshot(page, label + '-bulk')
     close_modal(page)
     page.locator('#sel-clear').click()
     page.locator('#page-size').select_option('250')
@@ -164,9 +168,9 @@ def full_flow(page, label):
     row.locator('[data-act="close"]').click()
     expect(row.locator('.start-button .spinner')).to_be_visible()
     expect(row.locator('[data-act="login"]')).to_be_enabled(timeout=5000)
-    row.locator('[data-act="proxy_check"]').click()
+    row.locator('.proxy-check[data-act="proxy_check"]').click()
     expect(row.locator('.proxy-check .spinner')).to_be_visible()
-    expect(row.locator('[data-act="proxy_check"]')).to_be_enabled()
+    expect(row.locator('.proxy-check[data-act="proxy_check"]')).to_be_enabled()
     # Backend validation must remain visible and focusable after scrolling.
     row.locator('.row-options summary').click()
     row.locator('[data-act="edit"]').click()
@@ -214,28 +218,34 @@ def full_flow(page, label):
     close_modal(page)
     page.locator('[data-tool="columns"]').click()
     expect(modal(page).locator('.column-item')).to_have_count(14)
+    screenshot(page, label + '-columns')
     close_modal(page)
     page.locator('[data-tool="browser_settings"]').click()
     expect(modal(page).locator('[name]')).to_have_count(2)
+    screenshot(page, label + '-browser-settings')
     close_modal(page)
 
     # Existing dialogs, reports and monitoring.
     page.locator('[data-tool="history"]').click()
     expect(modal(page).locator('.history-event')).to_have_count(1)
+    screenshot(page, label + '-history')
     modal(page).locator('.history-search').fill('zz-no-result')
     expect(modal(page).locator('.history-event')).to_have_count(0)
     close_modal(page)
     page.locator('[data-tool="trash"]').click()
     expect(modal(page).locator('.trash-item')).to_have_count(1)
+    screenshot(page, label + '-trash')
     close_modal(page)
     row.locator('.row-options summary').click()
     row.locator('[data-act="cookies"]').click()
     expect(modal(page).locator('.cookie-json')).to_contain_text('synthetic')
+    screenshot(page, label + '-cookies')
     close_modal(page)
     page.locator('.rail [data-tab="transfers"]').click()
     expect(page.locator('.job-card')).to_have_count(2)
     page.locator('[data-job-open="qa-export"]').click()
     expect(modal(page).locator('.report-table tbody tr')).to_have_count(1)
+    screenshot(page, label + '-report')
     close_modal(page)
     page.locator('.rail [data-tab="workspace"]').click()
     expect(page.locator('.ops-card')).to_have_count(6)
@@ -246,6 +256,7 @@ def full_flow(page, label):
     screenshot(page, label + '-monitor')
     page.locator('[data-update-open]').click()
     expect(modal(page).locator('[data-update-notes]')).to_be_visible()
+    screenshot(page, label + '-updates')
     modal(page).locator('[data-update-notes]').click()
     expect(page.locator('.release-screen .fullscreen')).to_be_visible()
     screenshot(page, label + '-release')
@@ -281,6 +292,7 @@ def main():
                         errors = []
                         context = browser.new_context(viewport=dict(width=width, height=height), device_scale_factor=scale)
                         page = context.new_page()
+                        page.set_default_timeout(8000)
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         page.on('console', lambda message: errors.append(message.text) if message.type == 'error' and '400' not in message.text else None)
                         started = time.perf_counter()
@@ -320,6 +332,27 @@ def main():
                 RESULTS.append(dict(case='5000-profiles', ok=True, elapsed=round(time.perf_counter()-started, 2)))
             except Exception as error:
                 ERRORS.append(dict(case='5000-profiles', error=str(error).split('Aria snapshot:')[0][:2400]))
+            finally:
+                if context:
+                    context.close()
+            # Runtime accessibility preference must remove transitions immediately.
+            context = None
+            try:
+                reset('light', 'en')
+                context = browser.new_context(viewport=dict(width=1280, height=720))
+                page = context.new_page()
+                page.goto(BASE, wait_until='networkidle')
+                page.emulate_media(reduced_motion='reduce')
+                page.locator('.header-actions [data-tool="add"]').click()
+                state = modal(page).evaluate("""el=>({animation:getComputedStyle(el).animationName,
+                    transition:getComputedStyle(el.querySelector('.btn')).transitionDuration})""")
+                assert state == dict(animation='none', transition='0s'), state
+                close_modal(page)
+                page.emulate_media(reduced_motion='no-preference')
+                assert page.locator('.header-actions .btn').first.evaluate("el=>getComputedStyle(el).transitionDuration") != '0s'
+                RESULTS.append(dict(case='runtime-reduced-motion', ok=True))
+            except Exception as error:
+                ERRORS.append(dict(case='runtime-reduced-motion', error=str(error).split('Aria snapshot:')[0][:2400]))
             finally:
                 if context:
                     context.close()
