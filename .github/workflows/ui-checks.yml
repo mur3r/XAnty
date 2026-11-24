@@ -8,6 +8,9 @@ on:
       - 'tests/*ui*'
       - 'tests/test_design_system.py'
       - 'tools/build_preview.py'
+      - 'tools/visual_audit*.py'
+      - 'tests/test_visual_audit_fixture.py'
+      - 'requirements-visual.txt'
       - '.github/workflows/ui-checks.yml'
 permissions:
   contents: read
@@ -49,3 +52,27 @@ jobs:
           python -c "import os, pathlib, tempfile, unittest, sys; test_root=pathlib.Path(os.environ['RUNNER_TEMP'])/'xanty-tests'; test_root.mkdir(exist_ok=True); tempfile.tempdir=str(test_root.resolve()); result=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.discover('tests')); sys.exit(not result.wasSuccessful())"
       - name: Python syntax
         run: python -m compileall -q xgenius tools
+
+  visual:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install isolated visual test tools
+        run: python -m pip install -r requirements-visual.txt
+      - name: Install test Chromium
+        run: python -m playwright install chromium
+      - name: Render and exercise the real interface
+        run: python tools/visual_audit.py
+      - name: Preserve synthetic screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: xanty-visual-audit
+          path: .ci-visual/
+          retention-days: 7
