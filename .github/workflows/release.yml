@@ -17,6 +17,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 35
+    env:
+      PYTHONUTF8: '1'
     defaults:
       run:
         shell: pwsh
@@ -37,7 +39,7 @@ jobs:
         run: python -m pip install -r requirements.txt -r requirements-build.txt
       - name: Test
         run: |
-          python -m unittest discover -s tests -q
+          python -c "import os, pathlib, tempfile, unittest, sys; test_root=pathlib.Path(os.environ['RUNNER_TEMP'])/'xanty-tests'; test_root.mkdir(exist_ok=True); tempfile.tempdir=str(test_root.resolve()); result=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.discover('tests')); sys.exit(not result.wasSuccessful())"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/test_profile_ui.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

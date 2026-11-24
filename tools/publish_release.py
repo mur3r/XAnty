@@ -19,6 +19,14 @@ def publish():
         raise RuntimeError('Invalid repository.')
     version_tuple(__version__)
     tag = 'v' + __version__
+    notes = (ROOT / 'xgenius/web/static/release-notes.md').read_text(encoding='utf-8').strip()
+    if not notes:
+        raise RuntimeError('Release notes must describe the published update.')
+    download_base = f'https://github.com/{repository}/releases/download/{tag}'
+    release_body = (f'**Установщик:** [XAnty-Setup.exe]({download_base}/XAnty-Setup.exe)\n\n'
+                    f'**Отдельный EXE:** [XAnty.exe]({download_base}/XAnty.exe)\n\n'
+                    'Обновления при запуске устанавливаются автоматически. Профили и настройки сохраняются.\n\n'
+                    + notes)
     directory = ROOT / 'dist/release'
     files = [directory / name for name in ('XAnty.exe', 'XAnty-Setup.exe')]
     sums = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
@@ -44,11 +52,11 @@ def publish():
             raise RuntimeError('This version is already published; use a newer build version.')
         if matches:
             release = matches[0]
-            release = api('PATCH', '/releases/' + str(release['id']), json={'tag_name': tag, 'target_commitish': commit, 'draft': True})
+            release = api('PATCH', '/releases/' + str(release['id']), json={'tag_name': tag, 'target_commitish': commit, 'draft': True, 'body': release_body})
         else:
             release = api('POST', '/releases', json={'tag_name': tag, 'target_commitish': commit,
-                          'name': 'XAnty ' + __version__, 'draft': True, 'generate_release_notes': True,
-                          'body': 'Установщик: XAnty-Setup.exe. Обновления при запуске устанавливаются автоматически. Профили и настройки сохраняются.'})
+                          'name': 'XAnty ' + __version__, 'draft': True,
+                          'body': release_body})
         release_id = release['id']
         for asset in release['assets']:
             api('DELETE', '/releases/assets/' + str(asset['id']))
