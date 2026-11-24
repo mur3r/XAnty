@@ -114,3 +114,6 @@ webui_profile/
 
 # Local workspace ownership lock, recreated by the running application.
 .xanty-workspace.lock
+
+# Synthetic browser visual-audit output.
+/.ci-visual/

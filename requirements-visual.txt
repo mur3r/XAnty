@@ -1,0 +1,3 @@
+# Optional CI/developer tools only; not packaged with XAnty.
+playwright==1.65.2
+aiohttp>=3.9

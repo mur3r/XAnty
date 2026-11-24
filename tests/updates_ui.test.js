@@ -4,9 +4,9 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 
-function environment({pending=true,notes='## Added\n- Scrolling notes\n- Offline access'}={}){
+function environment({pending=true,notes='## Added\n- Scrolling notes\n- Offline access',release=null,keepClosedConnected=false}={}){
  const events=new Map(),calls=[],dialogs=[],toasts=[];
- let data={configured:true,current_version:'2026.11.23.3',status:'current',release:null,
+ let data={configured:true,current_version:'2026.11.23.3',status:'current',release,
   installed_release:{version:'2026.11.23.3',notes,pending}};
  const banner={classList:{toggle(){}},innerHTML:''};
  const escape=value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -18,7 +18,7 @@ function environment({pending=true,notes='## Added\n- Scrolling notes\n- Offline
   },Dialogs:{open(options){
    const elements={'.modal-body':{scrollTop:0},'[data-installed-notes]':{innerHTML:''},
     '[data-update-body]':{innerHTML:'',insertAdjacentHTML(_,html){this.innerHTML=html+this.innerHTML;}}};
-   const d={options,el:{isConnected:true,elements},body:{elements},close(){this.el.isConnected=false;options.onClose?.();}};
+   const d={options,el:{isConnected:true,elements},body:{elements},close(){this.closed=true;if(!keepClosedConnected)this.el.isConnected=false;options.onClose?.();}};
    dialogs.push(d);return d;
   }}});
  vm.runInContext(fs.readFileSync('xgenius/web/static/updates.js','utf8'),c);
@@ -52,4 +52,18 @@ test('release content is escaped, and relocalizing keeps the reading position',a
  assert.doesNotMatch(body.innerHTML,/<img|<script>/);assert.match(body.innerHTML,/&lt;script&gt;/);
  d.el.elements['.modal-body'].scrollTop=420;e.events.get('languagechange')();
  assert.equal(d.el.elements['.modal-body'].scrollTop,420);
+});
+
+test('available release preview uses readable headings and lists without trusting remote HTML',async()=>{
+ const e=environment({pending:false,release:{version:'2026.11.23.5',size:100,page_url:'https://github.com/mur3r/XAnty/releases',notes:'## <img src=x>\n- <script>bad()</script>\n\nA paragraph'}});
+ await e.start();await e.show();
+ const html=e.dialogs[0].body.elements['[data-update-body]'].innerHTML;
+ assert.match(html,/release-preview/);assert.match(html,/<h3>&lt;img/);assert.match(html,/<li>&lt;script/);
+ assert.doesNotMatch(html,/<img|<script>/);assert.match(html,/data-update-check/);
+});
+
+test('updates reopen immediately while the old dialog is finishing its exit animation',async()=>{
+ const e=environment({pending:false,keepClosedConnected:true});await e.start();await e.show();
+ const old=e.dialogs[0];old.close();assert.equal(old.el.isConnected,true);assert.equal(old.closed,true);
+ await e.show();assert.equal(e.dialogs.length,2);assert.notEqual(e.dialogs[1],old);
 });

@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const context = vm.createContext({console, Set, FormData: class {},
   document: {addEventListener(){}}, setTimeout(){},
   I18N:{error:x=>x}, t:(key, args)=>key + JSON.stringify(args||{}), I:()=>'<svg></svg>'});
-for (const name of ['profile-management.js','workspace-operations.js','app.js'])
+for (const name of ['profile-management.js','profiles-screen.js','workspace-operations.js','app.js'])
   vm.runInContext(fs.readFileSync('xgenius/web/static/'+name,'utf8'), context);
 const run = source=>vm.runInContext(source,context);
 run(`S.data={accounts:[

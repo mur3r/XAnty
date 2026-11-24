@@ -61,6 +61,7 @@ class AccountState:
     proxy_ip: str = ""
     proxy_status: str = ""
     proxy_error: str = ""
+    proxy_rotating: bool = False
     proxy_location: dict = field(default_factory=dict)
     proxy_location_error: str = ""
     launch_error: str = ""

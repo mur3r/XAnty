@@ -4,7 +4,7 @@
  document.addEventListener('keydown',async event=>{
   if(event.key!=='Escape'||event.defaultPrevented||event.repeat||event.isComposing||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
   // Dialog/inline editor handlers take precedence over hiding the application.
-  if(document.querySelector('.modal-overlay'))return;
+  if(document.querySelector('.modal-overlay:not([inert])'))return;
   const menus=Array.from(document.querySelectorAll('.row-options[open]'));
   if(menus.length){menus.forEach(menu=>menu.open=false);event.preventDefault();return;}
   const hide=window.pywebview?.api?.hide;

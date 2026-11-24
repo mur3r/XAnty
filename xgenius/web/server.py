@@ -154,6 +154,8 @@ class WebApp(WorkspaceApiMixin):
         return self._json(self.updates.start_download(), status=202)
 
     def require_update_idle(self):
+        if self.actions and any(not task.done() for task in getattr(self.actions, '_proxy_rotations', {}).values()):
+            raise UpdateError('Wait for proxy rotation to finish before installing the update.')
         if self._active_profile_requests:
             raise UpdateError('Wait for profile operations and transfers to finish before installing the update.')
         if self.engine:
@@ -498,6 +500,10 @@ class WebApp(WorkspaceApiMixin):
         result = await self._require_engine().check_account_proxy(request.match_info["username"])
         return self._json(result)
 
+    async def api_proxy_rotate(self, request):
+        result = await self._require_engine().rotate_account_proxy(request.match_info['username'])
+        return self._json(result)
+
     async def api_action(self, request):
         """POST /api/actions/{name} — login, close, view, reset_errors."""
         name = request.match_info["name"]
@@ -657,6 +663,7 @@ class WebApp(WorkspaceApiMixin):
             web.put("/api/folders/{name}", self.api_folder_rename),
             web.delete("/api/folders/{name}", self.api_folder_delete),
             web.post("/api/accounts/{username}/proxy/check", self.api_proxy_check),
+            web.post('/api/accounts/{username}/proxy/rotate', self.api_proxy_rotate),
             web.get("/api/accounts/{username}/cookies", self.api_cookies_export),
             web.post("/api/accounts/{username}/cookies", self.api_cookies_import),
             web.get("/api/accounts/{username}", self.api_accounts_get),

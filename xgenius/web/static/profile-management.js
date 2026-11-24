@@ -21,10 +21,12 @@ const ProfileUI = (() => {
     return Math.max(0,Number(a.runtime_seconds)||0)+(Number.isFinite(extra)?extra:0);
   }
   const date=value=>value&&value!=='N/A'&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleString(I18N.language==='uk'?'uk-UA':I18N.language==='ru'?'ru-RU':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
-  function runtimeHTML(a){return `<span data-runtime>${new Intl.NumberFormat(I18N.language,{minimumFractionDigits:2,maximumFractionDigits:2}).format(runtimeSeconds(a)/3600)} ${t('hours_short')}</span>${a.has_browser?'<i class="runtime-live"></i>':''}`;}
+  const numberFormats=new Map();
+  function runtimeNumber(value){const lang=I18N.language;if(!numberFormats.has(lang))numberFormats.set(lang,new Intl.NumberFormat(lang,{minimumFractionDigits:2,maximumFractionDigits:2}));return numberFormats.get(lang).format(value);}
+  function runtimeHTML(a){return `<span data-runtime>${runtimeNumber(runtimeSeconds(a)/3600)} ${t('hours_short')}</span>${a.has_browser?'<i class="runtime-live"></i>':''}`;}
   function tick(){
     const rows=new Map(accounts().map(a=>[a.username,a]));
-    $$('#rows [data-runtime]').forEach(el=>{const a=rows.get(el.closest('[data-u]').dataset.u);if(a)el.textContent=new Intl.NumberFormat(I18N.language,{minimumFractionDigits:2,maximumFractionDigits:2}).format(runtimeSeconds(a)/3600)+' '+t('hours_short');});
+    $$('#rows [data-runtime]').forEach(el=>{const a=rows.get(el.closest('[data-u]').dataset.u);if(a)el.textContent=runtimeNumber(runtimeSeconds(a)/3600)+' '+t('hours_short');});
   }
   function applyColumns(){
     const visible=columns(),order=[...visible,...allColumns.filter(c=>!visible.includes(c))];
@@ -107,7 +109,7 @@ const ProfileUI = (() => {
       const query=$('.history-search',d.body).value.trim().toLocaleLowerCase();
       const events=response.events.filter(e=>[e.profile_name,e.username,e.actor,t('audit_'+e.action),JSON.stringify(e.changes)].join(' ').toLocaleLowerCase().includes(query));
       page=Math.min(page,Math.max(0,Math.ceil(events.length/50)-1));
-      $('.history-list',d.body).innerHTML=events.slice(page*50,(page+1)*50).map(e=>`<article class="history-event"><div class="history-heading"><strong>${esc(e.profile_name)}</strong><span class="status-pill">${t('audit_'+e.action)}</span></div><div class="hint">${date(e.at)} · ${esc(e.actor)} · @${esc(e.username)}</div>${Object.entries(e.changes||{}).map(([key,v])=>`<div class="history-change"><b>${esc(t(columnLabel(key)))}</b><span>${esc(value(key,v.before))}</span><span>→</span><span>${esc(value(key,v.after))}</span></div>`).join('')}</article>`).join('')||`<div class="empty compact">${t('history_empty')}</div>`;
+      $('.history-list',d.body).innerHTML=events.slice(page*50,(page+1)*50).map(e=>`<article class="history-event"><div class="history-heading"><strong>${esc(e.profile_name)}</strong><span class="status-pill">${t('audit_'+e.action)}</span></div><div class="hint">${date(e.at)} · ${esc(e.actor)} · @${esc(e.username)}</div>${Object.entries(e.changes||{}).map(([key,v])=>`<div class="history-change"><b>${esc(t(columnLabel(key)))}</b><span>${esc(value(key,v.before))}</span><span>→</span><span>${esc(value(key,v.after))}</span></div>`).join('')}</article>`).join('')||`<div class="empty compact">${t(query?'no_matches':'history_empty')}</div>`;
       $('[data-history-count]',d.body).textContent=t('shown',{from:events.length?page*50+1:0,to:Math.min(events.length,(page+1)*50),total:events.length});
       $('[data-history-prev]',d.body).disabled=page===0;$('[data-history-next]',d.body).disabled=(page+1)*50>=events.length;
     }
