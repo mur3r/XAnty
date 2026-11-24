@@ -273,8 +273,8 @@ def full_flow(page, label):
     audit_file_control(page)
     screenshot(page, label + '-cookies')
     close_modal(page)
-    row.locator('.row-options summary').click()
-    row.locator('[data-act="cookies_import"]').click()
+    # Retained legacy action entry; the current menu opens expanded cookie tools.
+    page.evaluate("Dialogs.importCookies('qa_000')")
     audit_file_control(page)
     screenshot(page, label + '-cookie-import')
     close_modal(page)
