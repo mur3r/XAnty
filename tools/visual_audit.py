@@ -135,8 +135,11 @@ def audit_file_control(page):
     expect(control.locator('.file-control-action')).to_have_text(page.evaluate("t('quality_file_choose')"))
     expect(control.locator('[data-file-name]')).to_have_text(page.evaluate("t('quality_file_empty')"))
     field = control.locator('input[type=file]')
-    field.set_input_files(dict(name='QA-довга-назва.xanty', mimeType='application/zip', buffer=b'synthetic, not an imported archive'))
-    expect(control.locator('[data-file-name]')).to_have_text('QA-довга-назва.xanty')
+    cookie_file = '.json' in (field.get_attribute('accept') or '')
+    filename = 'QA-довга-назва.json' if cookie_file else 'QA-довга-назва.xanty'
+    field.set_input_files(dict(name=filename, mimeType='application/json' if cookie_file else 'application/zip',
+                              buffer=b'[]' if cookie_file else b'synthetic, not an imported archive'))
+    expect(control.locator('[data-file-name]')).to_have_text(filename)
     field.focus()
     page.keyboard.press('Tab')
     page.keyboard.press('Shift+Tab')
@@ -266,6 +269,8 @@ def full_flow(page, label):
     row.locator('.row-options summary').click()
     row.locator('[data-act="cookies"]').click()
     expect(modal(page).locator('.cookie-json')).to_contain_text('synthetic')
+    modal(page).locator('details summary').click()
+    audit_file_control(page)
     screenshot(page, label + '-cookies')
     close_modal(page)
     row.locator('.row-options summary').click()

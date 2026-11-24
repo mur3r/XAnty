@@ -46,3 +46,6 @@ summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 
 /* The section descriptions already appear in the shared page header. */
 #view-load > .section-note,#view-workspace .ops-toolbar > p { display: none; }
 #view-workspace .ops-toolbar { justify-content: flex-end; }
+
+.premium-dialog .file-control:has(input:disabled) { opacity: .55; }
+.premium-dialog .file-control input:disabled { cursor: not-allowed; }
