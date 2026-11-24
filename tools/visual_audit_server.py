@@ -151,6 +151,7 @@ async def api(request):
             for a in s.accounts:
                 if a['username'] in names:
                     a.update(opening=opened, closing=not opened)
+            await s.broadcast()
             asyncio.create_task(s.finish_action(names, opened))
     elif path.startswith('/api/accounts/'):
         name = path.split('/')[3]

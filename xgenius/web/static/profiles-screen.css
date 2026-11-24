@@ -54,21 +54,24 @@
 .profiles-view .profiles-table tr:hover td, .profiles-view .profiles-table tr.selected td { background: var(--profile-row-bg); }
 .profiles-view .profiles-table .check-col { position: sticky; left: 0; width: 38px; min-width: 38px; padding-left: var(--space-3); padding-right: var(--space-2); z-index: 2; }
 .profiles-view .profiles-table .number-col { min-width: 40px; padding-left: var(--space-2); font-size: 11px; }
-.profiles-view .profiles-table [data-column=name] { position: sticky; left: 38px; z-index: 2; min-width: 242px; max-width: 340px; box-shadow: 1px 0 0 var(--line-soft); }
+.profiles-view .profiles-table [data-column=name] { position: sticky; left: 38px; z-index: 2; min-width: 284px; max-width: 360px; box-shadow: 1px 0 0 var(--line-soft); }
 .profiles-view .profiles-table th.check-col, .profiles-view .profiles-table th[data-column=name] { z-index: 6; }
 .profiles-view .profiles-table .row-options-col { position: sticky; right: 0; z-index: 3; min-width: 74px; box-shadow: -1px 0 0 var(--line-soft); }
 .profiles-view .profiles-table th.row-options-col { z-index: 6; }
 .profiles-view .profiles-table .row-options-col:has(.row-options[open]) { z-index: 20; }
 .profiles-view .profiles-table tr.selected .check-col { box-shadow: inset 3px 0 0 var(--color-accent); }
-.profiles-view .profile-identity { gap: var(--space-2-5); min-width: 218px; width: 218px; }
+.profiles-view .profile-identity { gap: var(--space-2-5); min-width: 260px; width: 260px; }
 .profiles-view .profile-avatar { width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--color-accent-border); border-radius: var(--radius-lg); color: var(--color-accent-ink); background: var(--accent-soft); font-size: 12px; font-weight: var(--weight-semibold); letter-spacing: -.02em; }
 .profiles-view .avatar-tone-1 { background: var(--surface-2); }
 .profiles-view .avatar-tone-2 { background: var(--hover); }
 .profiles-view .avatar-long { font-size: 8px; letter-spacing: -.05em; }
 .profiles-view .profile-copy { min-width: 0; flex: 1; }
 .profiles-view .profile-title { max-width: 246px; font-size: 12px; line-height: 1.5; font-weight: var(--weight-semibold); }
-.profiles-view .profile-sub { gap: var(--space-1-5); align-items: center; max-width: 270px; font-size: 10px; line-height: 1.5; }
-.profiles-view .profile-sub > span:first-child { overflow: hidden; text-overflow: ellipsis; max-width: 96px; }
+.profiles-view .profile-sub { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 2px var(--space-2); align-items: center; max-width: 270px; font-size: 10px; line-height: 1.5; }
+.profiles-view .profile-sub > .tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.profiles-view .profile-sub .profile-tags { grid-column: 1 / -1; }
+.profiles-view .profile-sub .profile-tag { flex-shrink: 0; }
+.profiles-view .profile-sub > span:first-child { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .profiles-view .profile-sub .tag { color: var(--text-2); background: var(--surface-2); border-radius: var(--radius-xs); padding: 1px var(--space-1); }
 .profiles-view .profile-tags { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 255px; overflow: hidden; vertical-align: middle; }
 .profiles-view .profile-tag { display: inline-block; padding: 2px var(--space-1-5); background: var(--accent-soft); border: 1px solid var(--color-accent-border); color: var(--color-accent-ink); border-radius: var(--radius-xs); font-size: 10px; line-height: 1.4; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -150,7 +153,7 @@
   .profiles-view .connection > i { display: none; }
   .profiles-view .profile-management-toolbar, .profiles-view .table-toolbar { padding-left: var(--space-2-5); padding-right: var(--space-2-5); }
   .profiles-view .profile-management-toolbar .spacer { display: none; }
-  .profiles-view .profiles-table [data-column=name] { position: static; min-width: 220px; }
+  .profiles-view .profiles-table [data-column=name] { position: static; min-width: 284px; }
   .profiles-view .selection-bar .btn svg { display: inline-block; }
   .profiles-view .table-footer { gap: var(--space-2); }
   .profiles-view .profile-page-jump > span:first-child { display: none; }

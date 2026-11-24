@@ -76,3 +76,4 @@ jobs:
           name: xanty-visual-audit
           path: .ci-visual/
           retention-days: 7
+          include-hidden-files: true

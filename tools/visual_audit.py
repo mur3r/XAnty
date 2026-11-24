@@ -257,19 +257,19 @@ def full_flow(page, label):
 def main():
     global BASE
     OUTPUT.mkdir(exist_ok=True)
+    server_log = (OUTPUT / 'fixture-server.log').open('w', encoding='utf-8')
     process = subprocess.Popen([sys.executable, str(ROOT / 'tools/visual_audit_server.py')], cwd=ROOT,
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
+                               stdout=server_log, stderr=subprocess.STDOUT)
+    BASE = 'http://127.0.0.1:18769'
     try:
-        for _ in range(30):
-            line = process.stdout.readline()
-            if line.startswith('READY '):
-                BASE = line.strip().split(' ', 1)[1]
+        for attempt in range(50):
+            try:
+                reset()
                 break
-            if not line:
-                raise RuntimeError('Fixture server did not start: ' + str(process.poll()))
-            print(line.rstrip(), flush=True)
-        if not BASE:
-            raise RuntimeError('Missing fixture server ready marker')
+            except (OSError, TimeoutError):
+                if process.poll() is not None or attempt == 49:
+                    raise RuntimeError('Fixture server failed to start')
+                time.sleep(.1)
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             sizes = [('desktop', 1440, 900, 1), ('laptop', 1280, 720, 1.25),
@@ -279,13 +279,13 @@ def main():
                     for size, width, height, scale in sizes:
                         label = f'{theme}-{language}-{size}'
                         errors = []
-                        reset(theme, language)
                         context = browser.new_context(viewport=dict(width=width, height=height), device_scale_factor=scale)
                         page = context.new_page()
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         page.on('console', lambda message: errors.append(message.text) if message.type == 'error' and '400' not in message.text else None)
                         started = time.perf_counter()
                         try:
+                            reset(theme, language)
                             page.goto(BASE, wait_until='networkidle')
                             expect(page.locator('#screen-main')).to_be_visible()
                             audit_dimensions(page)
@@ -297,7 +297,7 @@ def main():
                             assert not errors, errors
                             RESULTS.append(dict(case=label, ok=True, scale=scale, elapsed=round(time.perf_counter()-started, 2)))
                         except Exception as error:
-                            ERRORS.append(dict(case=label, error=str(error), console=errors))
+                            ERRORS.append(dict(case=label, error=str(error).split('Aria snapshot:')[0][:2400], console=errors))
                             try:
                                 screenshot(page, label + '-FAILED', embed=len(ERRORS) <= 2)
                             except Exception:
@@ -305,22 +305,31 @@ def main():
                         finally:
                             context.close()
             # Render a large data set; only the current page may enter the DOM.
-            reset(count=5000)
-            context = browser.new_context(viewport=dict(width=1280, height=720))
-            page = context.new_page()
-            started = time.perf_counter()
-            page.goto(BASE, wait_until='networkidle')
-            expect(page.locator('#rows tr')).to_have_count(50)
-            page.locator('#page-size').select_option('250')
-            expect(page.locator('#rows tr')).to_have_count(250)
-            page.locator('#f-search').fill('qa_4999')
-            expect(page.locator('#rows tr')).to_have_count(1)
-            RESULTS.append(dict(case='5000-profiles', ok=True, elapsed=round(time.perf_counter()-started, 2)))
-            context.close()
+            context = None
+            try:
+                reset(count=5000)
+                context = browser.new_context(viewport=dict(width=1280, height=720))
+                page = context.new_page()
+                started = time.perf_counter()
+                page.goto(BASE, wait_until='networkidle')
+                expect(page.locator('#rows tr')).to_have_count(50)
+                page.locator('#page-size').select_option('250')
+                expect(page.locator('#rows tr')).to_have_count(250)
+                page.locator('#f-search').fill('qa_4999')
+                expect(page.locator('#rows tr')).to_have_count(1)
+                RESULTS.append(dict(case='5000-profiles', ok=True, elapsed=round(time.perf_counter()-started, 2)))
+            except Exception as error:
+                ERRORS.append(dict(case='5000-profiles', error=str(error).split('Aria snapshot:')[0][:2400]))
+            finally:
+                if context:
+                    context.close()
             browser.close()
     finally:
         process.terminate()
         process.wait(timeout=10)
+        server_log.close()
+        if ERRORS:
+            print('FIXTURE_LOG_TAIL ' + (OUTPUT / 'fixture-server.log').read_text(encoding='utf-8')[-5000:], flush=True)
         report = dict(cases=RESULTS, errors=ERRORS, screenshots=[path.name for path in IMAGES])
         (OUTPUT / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
         print('VISUAL_RESULT ' + json.dumps(dict(passed=len(RESULTS), failed=len(ERRORS), errors=ERRORS), ensure_ascii=False), flush=True)
