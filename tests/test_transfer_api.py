@@ -17,7 +17,9 @@ from aiohttp.test_utils import TestClient, TestServer
 from xgenius.config import Config
 from xgenius.folders import FolderStore
 from xgenius.portable_session import store_session
+from xgenius.profile_leases import ProfileLease
 from xgenius.web.actions import Actions
+from xgenius.web.engine import Engine
 from xgenius.web.server import WebApp
 
 
@@ -111,6 +113,71 @@ class TransferApiTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post('/api/profiles/export', json={'all': True},
                                           headers={'Origin': 'https://other.example'})
         self.assertEqual(response.status, 403)
+
+    async def test_all_145_profiles_export_during_startup_size_scan(self):
+        self.accounts[:] = [{'username': f'profile_{index:03d}', 'auto_login': False}
+                            for index in range(145)]
+        for account in self.accounts:
+            username = account['username']
+            (self.config.get_profile_dir(username) / 'Preferences').write_text(username)
+            store_session(self.config, username, [
+                {'name': 'session', 'value': username, 'domain': '.example.test'}])
+        entered, release = threading.Event(), threading.Event()
+        self.app.engine._shutdown_event = threading.Event()
+
+        def slow_size(config, username):
+            entered.set()
+            if not release.wait(30):
+                raise TimeoutError('Size scan was not released')
+            return {'bytes': 0}
+
+        scan = None
+        try:
+            with patch('xgenius.web.engine.profile_size', side_effect=slow_size), \
+                    patch('xgenius.profile_leases.psutil.process_iter', return_value=[]):
+                scan = asyncio.create_task(asyncio.to_thread(
+                    Engine._measure_profile_sizes, self.app.engine, ['profile_000']))
+                self.assertTrue(await asyncio.to_thread(entered.wait, 5))
+                response = await self.client.post('/api/profiles/export', json={'all': True})
+                self.assertEqual(response.status, 202)
+                job_id = (await response.json())['id']
+                await asyncio.wait_for(asyncio.shield(self.app.jobs.get(job_id).task), 30)
+                job = await self.finish(job_id)
+                self.assertFalse(scan.done(), 'Export waited for the size scan to finish')
+                self.assertEqual(job['total'], 145)
+                self.assertEqual(job['exported'], 145)
+                self.assertEqual(job['integrity'], 'verified')
+                response = await self.client.get('/api/profiles/download/' + job_id)
+                self.assertEqual(response.status, 200)
+                with ZipFile(io.BytesIO(await response.read())) as archive:
+                    manifest = json.loads(archive.read('manifest.json'))
+                    self.assertEqual([p['account']['username'] for p in manifest['profiles']],
+                                     [a['username'] for a in self.accounts])
+                    for index, account in enumerate(self.accounts):
+                        prefix = f'profiles/{index:06d}'
+                        self.assertEqual(archive.read(prefix + '/browser/Preferences').decode(),
+                                         account['username'])
+                        cookies = json.loads(archive.read(prefix + '/cookies.json'))
+                        self.assertEqual(cookies[0]['value'], account['username'])
+        finally:
+            release.set()
+            if scan is not None:
+                await scan
+
+    async def test_export_rejects_a_profile_leased_by_another_session_then_retries(self):
+        with ProfileLease.acquire(self.config, 'alice', check_processes=False):
+            response = await self.client.post('/api/profiles/export', json={'all': True})
+            self.assertEqual(response.status, 202)
+            job_id = (await response.json())['id']
+            await self.app.jobs.get(job_id).task
+            job = await (await self.client.get('/api/jobs/' + job_id)).json()
+            self.assertEqual(job['status'], 'failed')
+            self.assertIn('already open in another session', job['error'])
+            self.assertFalse(job['download_ready'])
+        self.assertFalse(self.app.actions._transferring)
+        response = await self.client.post('/api/profiles/export', json={'all': True})
+        job = await self.finish((await response.json())['id'])
+        self.assertEqual(job['exported'], 2)
 
     async def test_preferences_survive_a_new_app_and_reject_unsupported_values(self):
         response = await self.client.put('/api/preferences', json={'language': 'uk', 'theme': 'light'})

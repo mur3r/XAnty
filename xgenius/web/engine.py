@@ -19,7 +19,6 @@ from xgenius.settings import EXECUTOR_MAX_WORKERS
 from xgenius.sysmon import CountingExecutor, SystemMonitor
 from xgenius.browser_workspace import save_workspace
 from xgenius.preferences import read_preferences
-from xgenius.profile_leases import ProfileInUseError, ProfileLease, profile_directory
 from xgenius.workspace_operations import profile_size
 
 # Статусы, которые считаем "ошибкой" в сводке (всё, кроме служебных пауз/восстановления)
@@ -358,9 +357,10 @@ class Engine:
             if cancellation.is_set():
                 break
             try:
-                with ProfileLease.acquire_path(profile_directory(self.config, username), create_profile=False):
-                    result[username] = profile_size(self.config, username)
-            except (ProfileInUseError, OSError, ValueError):
+                # This scan only reads file sizes and tolerates concurrent changes.
+                # An exclusive lease here makes exports see a closed profile as open.
+                result[username] = profile_size(self.config, username)
+            except (OSError, ValueError):
                 continue
         return result
 

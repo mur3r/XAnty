@@ -19,8 +19,8 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 TOP_FILES = {
-    '.gitignore', 'ANALYSIS.md', 'README.md', 'main.py',
-    'requirements.txt', 'requirements-build.txt',
+    '.gitignore', 'AGENTS.md', 'ANALYSIS.md', 'README.md', 'main.py',
+    'requirements.txt', 'requirements-build.txt', 'requirements-visual.txt',
 }
 SOURCE_DIRS = {'.github', 'docs', 'tests', 'tools', 'xgenius'}
 BINARY_FILES = {
