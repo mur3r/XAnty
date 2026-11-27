@@ -294,6 +294,9 @@ password_x|Пароль аккаунта X|X account password|Пароль ак�
 auth_token|Токен auth_token|auth_token|Токен auth_token
 ct0_token|Токен ct0|ct0|Токен ct0
 notes|Заметки|Notes|Нотатки
+no_notes|Нет заметок|No notes|Немає нотаток
+notes_edit_hint|Двойной щелчок — редактировать заметку|Double-click to edit the note|Подвійне клацання — редагувати нотатку
+notes_save_hint|Ctrl+Enter — сохранить · Esc — отменить|Ctrl+Enter to save · Esc to cancel|Ctrl+Enter — зберегти · Esc — скасувати
 browser_settings|Настройки браузера|Browser settings|Налаштування браузера
 browser_language|Язык браузера|Browser language|Мова браузера
 timezone|Часовой пояс|Time zone|Часовий пояс

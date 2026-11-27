@@ -49,3 +49,28 @@ summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 
 
 .premium-dialog .file-control:has(input:disabled) { opacity: .55; }
 .premium-dialog .file-control input:disabled { cursor: not-allowed; }
+
+/* Leave the profile list more vertical room; activity has its own navigation view. */
+.main { padding-top: var(--space-4); }
+.main > .page-header { align-items: center; gap: var(--space-3); padding-bottom: var(--space-3); margin-bottom: var(--space-3); }
+.main > .page-header h1 { font-size: 22px; line-height: 1.3; }
+.rail-button[data-tab=logs] { position: relative; }
+.rail-count { position: absolute; top: 2px; right: 0; min-width: 16px; padding: 1px 3px; border-radius: var(--radius-sm); color: var(--color-on-primary); background: var(--color-primary); font-size: 9px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.logs-view { overflow: hidden; }
+.logs-view .logpanel { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 0; }
+.logs-view .log-head { height: auto; flex-shrink: 0; flex-wrap: wrap; padding: var(--space-3); }
+.logs-view .log-head input { display: block; flex: 1; min-width: 120px; max-width: 420px; height: 34px; font-size: 12px; }
+.logs-view .logs { flex: 1; min-height: 0; height: auto; font-size: 12px; }
+.profiles-view .notes-cell { min-width: 200px; cursor: text; }
+.note-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; color: var(--text-2); }
+.note-preview.is-empty { color: var(--muted); font-style: italic; }
+.profiles-view .notes-cell.is-editing { min-width: 280px; max-width: 360px; overflow: visible; white-space: normal; }
+.note-editor textarea { display: block; width: 100%; min-height: 70px; max-height: 220px; resize: vertical; font: inherit; white-space: pre-wrap; }
+.note-editor-actions { display: flex; align-items: center; gap: var(--space-1); margin-top: var(--space-1); }
+.note-editor-actions small { flex: 1; color: var(--muted); font-size: 10px; }
+.note-editor-error { color: var(--err); font-size: 11px; white-space: normal; margin-top: var(--space-1); }
+@media (max-width:650px) {
+  .main > .page-header { align-items: stretch; }
+  .profiles-view .profiles-table [data-column=name] { position: static; box-shadow: none; }
+  .profiles-view .notes-cell.is-editing { min-width: 240px; max-width: 280px; }
+}

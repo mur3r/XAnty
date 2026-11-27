@@ -7,6 +7,7 @@ from urllib.parse import quote, urljoin, urlsplit
 from xgenius.cookies import CookieError, normalize_cookies
 from xgenius.profile_settings import ProfileSettingsError, browser_settings
 from xgenius.proxy_service import ProxyCheckError, parse_proxy
+from xgenius.profile_notes import note_text
 
 
 API_BASE = 'https://dolphin-anty-api.com'
@@ -103,7 +104,7 @@ def map_profile(profile: dict, username: str = '', folder: str = 'Dolphin') -> t
                'group': folder, 'auth_token': '', 'ct0_token': '', 'headless': False,
                'auto_login': False, 'dolphin_profile_id': source_id,
                'dolphin_name': str(profile.get('name') or ''), 'profile_name': str(profile.get('name') or username),
-               'notes': str(profile.get('notes') or ''), 'tags': profile.get('tags') or [],
+               'notes': note_text(profile.get('notes')), 'tags': profile.get('tags') or [],
                'dolphin_source': profile, **settings}
     return account, warnings
 

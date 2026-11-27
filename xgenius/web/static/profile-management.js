@@ -38,7 +38,7 @@ const ProfileUI = (() => {
   }
   async function metadata(names,values){await api('PATCH','/api/accounts/metadata',{usernames:names,metadata:values});await refreshState();}
   function rename(username){
-    if(S.renaming)return;
+    if(S.renaming||S.noteEditing)return;
     const row=$$('#rows [data-u]').find(el=>el.dataset.u===username),title=$('.profile-title',row);
     if(!title)return;
     const account=accounts().find(a=>a.username===username),name=account.profile_name||username;
@@ -53,6 +53,41 @@ const ProfileUI = (() => {
     };
     input.onkeydown=event=>{if(event.key==='Enter'||event.key==='Escape'){event.preventDefault();event.stopPropagation();finish(event.key==='Enter');}};
     input.onblur=()=>finish(true);
+  }
+  function editNote(username){
+    if(S.renaming||S.noteEditing)return;
+    const row=$$('#rows [data-u]').find(el=>el.dataset.u===username),cell=row&&$('[data-note]',row);
+    const account=accounts().find(a=>a.username===username);
+    if(!cell||!account)return;
+    const original=account.notes||'',editor=document.createElement('div');
+    editor.className='note-editor';
+    editor.innerHTML=`<textarea rows="3" maxlength="10000" aria-label="${esc(t('notes'))}"></textarea><div class="note-editor-actions"><small>${esc(t('notes_save_hint'))}</small><button type="button" class="icon-button" data-note-save aria-label="${esc(t('save'))}" title="${esc(t('save'))}">${I('check',16)}</button><button type="button" class="icon-button" data-note-cancel aria-label="${esc(t('cancel'))}" title="${esc(t('cancel'))}">${I('x',16)}</button></div><div class="note-editor-error hidden" role="alert"></div>`;
+    const input=$('textarea',editor),buttons=$$('button',editor),error=$('.note-editor-error',editor);
+    input.value=original;S.noteEditing=username;cell.classList.add('is-editing');cell.replaceChildren(editor);
+    let busy=false,finished=false;
+    const finish=async save=>{
+      if(finished||busy)return;
+      if(save&&input.value!==original){
+        busy=true;input.disabled=true;buttons.forEach(button=>button.disabled=true);editor.setAttribute('aria-busy','true');
+        try{await metadata([username],{notes:input.value});}
+        catch(reason){
+          busy=false;input.disabled=false;buttons.forEach(button=>button.disabled=false);editor.setAttribute('aria-busy','false');
+          error.textContent=I18N.error(reason.message);error.classList.remove('hidden');input.focus();return;
+        }
+      }
+      finished=true;S.noteEditing=null;renderTable();
+      const next=$$('#rows [data-u]').find(el=>el.dataset.u===username);
+      if(!save&&next)$('[data-note]',next)?.focus({preventScroll:true});
+    };
+    $('[data-note-save]',editor).onclick=()=>finish(true);
+    $('[data-note-cancel]',editor).onclick=()=>finish(false);
+    input.onkeydown=event=>{
+      if(event.key==='Escape'||event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
+        event.preventDefault();event.stopPropagation();finish(event.key!=='Escape');
+      }
+    };
+    editor.onfocusout=event=>{if(!editor.contains(event.relatedTarget))finish(true);};
+    input.focus();input.setSelectionRange(input.value.length,input.value.length);
   }
   async function preferences(values){S.preferences=await api('PUT','/api/preferences',values);}
   function columnSettings(){
@@ -117,5 +152,5 @@ const ProfileUI = (() => {
     $('[data-history-prev]',d.body).onclick=()=>{page--;render();};$('[data-history-next]',d.body).onclick=()=>{page++;render();};
     render();
   }
-  return {columns,matches,sort,runtimeSeconds,runtimeHTML,date,tick,applyColumns,metadata,rename,columnSettings,remove,trash,history,statusOptions};
+  return {columns,matches,sort,runtimeSeconds,runtimeHTML,date,tick,applyColumns,metadata,rename,editNote,columnSettings,remove,trash,history,statusOptions};
 })();
