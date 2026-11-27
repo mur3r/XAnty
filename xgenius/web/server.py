@@ -23,6 +23,7 @@ from xgenius import __version__
 from xgenius.config import default_base_dir, get_paths_from_base, read_saved_base_dir, save_base_dir
 from xgenius.process_utils import force_kill_chromedrivers
 from xgenius.settings import BROWSER_APP_MODE, OPEN_BROWSER, WEB_HOST, WEB_PORT
+from xgenius.web.package_response import PackageFileResponse
 from xgenius.web.actions import ActionError, Actions
 from xgenius.web.engine import Engine
 from xgenius.jobs import JobManager
@@ -365,7 +366,7 @@ class WebApp(WorkspaceApiMixin):
         job = self._job(request)
         if job.status != 'completed' or not job.file_path or not job.file_path.is_file():
             raise ActionError('Profile package is not ready')
-        return web.FileResponse(job.file_path, headers={
+        return PackageFileResponse(job.file_path, headers={
             'Content-Type': 'application/octet-stream',
             'Content-Disposition': f'attachment; filename="{job.file_path.name}"',
             'Cache-Control': 'no-store',
