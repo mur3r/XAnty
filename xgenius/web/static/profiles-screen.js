@@ -37,7 +37,8 @@ const ProfilesScreen=(()=>{
   const wrap=$('#view-profiles .table-wrap'),open=$('#rows .row-options[open]');
   const focused=document.activeElement,owner=focused?.closest?.('[data-u]');
   return {top:wrap?.scrollTop||0,left:wrap?.scrollLeft||0,open:open?.closest('[data-u]')?.dataset.u,
-   focused:owner?.dataset.u,action:focused?.dataset?.act,summary:focused?.tagName==='SUMMARY'};
+   focused:owner?.dataset.u,action:focused?.dataset?.act,summary:focused?.tagName==='SUMMARY',
+   control:['[data-note]','[data-rename]','[data-chk]','[data-profile-status]'].find(selector=>focused?.matches?.(selector))};
  }
  function positionMenu(summary){
   if(!summary?.parentElement?.open)return;
@@ -55,6 +56,7 @@ const ProfilesScreen=(()=>{
    const focused=rows.find(row=>row.dataset.u===context.focused);
    if(focused&&context.action)$$('[data-act]',focused).find(el=>el.dataset.act===context.action)?.focus({preventScroll:true});
    else if(focused&&context.summary)$('summary',focused)?.focus({preventScroll:true});
+   else if(focused&&context.control)$(context.control,focused)?.focus({preventScroll:true});
   }
  }
  function loading(active){

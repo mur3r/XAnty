@@ -65,27 +65,30 @@ const ProfileUI = (() => {
     const input=$('textarea',editor),buttons=$$('button',editor),error=$('.note-editor-error',editor);
     input.value=original;S.noteEditing=username;cell.classList.add('is-editing');cell.replaceChildren(editor);
     let busy=false,finished=false;
-    const finish=async save=>{
+    const finish=async(save,restore=false)=>{
       if(finished||busy)return;
       if(save&&input.value!==original){
         busy=true;input.disabled=true;buttons.forEach(button=>button.disabled=true);editor.setAttribute('aria-busy','true');
         try{await metadata([username],{notes:input.value});}
         catch(reason){
           busy=false;input.disabled=false;buttons.forEach(button=>button.disabled=false);editor.setAttribute('aria-busy','false');
-          error.textContent=I18N.error(reason.message);error.classList.remove('hidden');input.focus();return;
+          error.textContent=I18N.error(reason.message);error.classList.remove('hidden');
+          if(editor.contains(document.activeElement)||document.activeElement===document.body)input.focus();
+          return;
         }
       }
+      const returnFocus=restore&&(editor.contains(document.activeElement)||document.activeElement===document.body);
       finished=true;S.noteEditing=null;renderTable();
       const next=$$('#rows [data-u]').find(el=>el.dataset.u===username);
-      if(!save&&next)$('[data-note]',next)?.focus({preventScroll:true});
+      if(returnFocus&&next)$('[data-note]',next)?.focus({preventScroll:true});
     };
-    $('[data-note-save]',editor).onclick=()=>finish(true);
-    $('[data-note-cancel]',editor).onclick=()=>finish(false);
-    input.onkeydown=event=>{
-      if(event.key==='Escape'||event.key==='Enter'&&(event.ctrlKey||event.metaKey)){
-        event.preventDefault();event.stopPropagation();finish(event.key!=='Escape');
+    $('[data-note-save]',editor).onclick=()=>finish(true,true);
+    $('[data-note-cancel]',editor).onclick=()=>finish(false,true);
+    editor.addEventListener('keydown',event=>{
+      if(!event.isComposing&&(event.key==='Escape'||event.key==='Enter'&&(event.ctrlKey||event.metaKey))){
+        event.preventDefault();event.stopPropagation();finish(event.key!=='Escape',true);
       }
-    };
+    });
     editor.addEventListener('focusout',event=>{if(!editor.contains(event.relatedTarget))finish(true);});
     input.focus();input.setSelectionRange(input.value.length,input.value.length);
   }
