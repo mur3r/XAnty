@@ -52,6 +52,8 @@ jobs:
           python -c "import os, pathlib, tempfile, unittest, sys; test_root=pathlib.Path(os.environ['RUNNER_TEMP'])/'xanty-tests'; test_root.mkdir(exist_ok=True); tempfile.tempdir=str(test_root.resolve()); result=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.discover('tests')); sys.exit(not result.wasSuccessful())"
       - name: Python syntax
         run: python -m compileall -q xgenius tools
+      - name: Actual stable Chromium startup and search repair
+        run: python tools/smoke_browser.py --install-stable
 
   visual:
     runs-on: windows-latest

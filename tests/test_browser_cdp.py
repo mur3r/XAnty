@@ -44,3 +44,35 @@ class CdpTests(unittest.TestCase):
         self.assertIn(('Target.closeTarget',{'targetId':'ours'}),calls)
         self.assertEqual(calls[0],('Target.createTarget',{'url':'about:blank','background':True}))
         self.assertFalse(any(method=='Target.activateTarget' for method,_ in calls))
+
+    def test_internal_pages_use_a_background_tab_even_when_hidden_targets_are_supported(self):
+        self.check_target_parameters('chrome://settings/searchEngines', {'url': 'about:blank', 'background': True})
+        self.check_target_parameters('chrome-untrusted://test/', {'url': 'about:blank', 'background': True})
+        self.check_target_parameters('devtools://devtools/', {'url': 'about:blank', 'background': True})
+
+    def test_web_diagnostics_still_use_hidden_targets_when_supported(self):
+        for url in ('about:blank', 'https://example.test/', 'http://127.0.0.1/'):
+            self.check_target_parameters(url, {'url': 'about:blank', 'background': True, 'hidden': True})
+
+    def check_target_parameters(self, url, expected):
+        module = self.module()
+        calls = []
+        class Connection:
+            hidden_supported = True
+            def call(self, method, params=None, **kwargs):
+                calls.append((method, params or {}))
+                return {'Target.createTarget': {'targetId': 'owned'},
+                        'Target.attachToTarget': {'sessionId': 'ours'},
+                        'Target.getTargets': {'targetInfos': []}}.get(method, {})
+        from contextlib import contextmanager
+        @contextmanager
+        def connect(*args, **kwargs):
+            yield Connection()
+        with patch.object(module, 'browser_connection', connect):
+            with module.background_target(object(), url):
+                pass
+        self.assertEqual(calls[0], ('Target.createTarget', expected))
+        if url != 'about:blank':
+            self.assertIn(('Page.navigate', {'url': url}), calls)
+        self.assertIn(('Target.closeTarget', {'targetId': 'owned'}), calls)
+        self.assertFalse(any(method == 'Target.activateTarget' for method, _ in calls))
