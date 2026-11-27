@@ -123,7 +123,10 @@ def background_target(browser,url='about:blank',timeout=12):
         target_id=None
         try:
             parameters={'url':'about:blank','background':True}
-            if connection.hidden_supported:parameters['hidden']=True
+            # Hidden WebUI targets crash current Chrome (including CfT 158).
+            # Internal pages need a regular background tab; never activate it.
+            if connection.hidden_supported and (url == 'about:blank' or urlsplit(url).scheme in ('http', 'https')):
+                parameters['hidden']=True
             target_id=connection.call('Target.createTarget',parameters)['targetId']
             session_id=connection.call('Target.attachToTarget',{'targetId':target_id,'flatten':True})['sessionId']
             if url!='about:blank':connection.call('Page.navigate',{'url':url},session_id=session_id)
