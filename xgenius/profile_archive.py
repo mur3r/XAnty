@@ -152,11 +152,22 @@ def export_package(config, accounts: list[dict], destination: Path, progress=Non
                 manifest['profiles'].append({'key': f'{index:06d}',
                                              'account': copy.deepcopy(account) if full else _settings_only_account(account)})
                 report.append({'username': username, 'status': 'exported', 'cookies': len(cookies),
-                               'files': file_count, 'warnings': warnings, 'integrity': 'verified'})
+                               'files': file_count, 'warnings': warnings, 'integrity': 'pending'})
                 if progress:
                     progress(processed=index + 1, total=len(accounts), report=report)
             _write_bytes(archive, 'manifest.json', json.dumps(manifest, ensure_ascii=False).encode('utf-8'), checksums)
             archive.writestr(_CHECKSUMS, json.dumps({'algorithm': 'sha256', 'files': checksums}))
+        # A checksum of the source bytes does not validate the written ZIP stream.
+        # Reopen the finished file before reporting success or offering a download.
+        if progress:
+            progress(phase='verifying_export', processed=len(accounts), total=len(accounts), report=report)
+        inspect_package(destination, cancelled=cancelled)
+        if cancelled and cancelled():
+            raise ArchiveError('Operation cancelled')
+        for row in report:
+            row['integrity'] = 'verified'
+        if progress:
+            progress(processed=len(accounts), total=len(accounts), report=report)
     except BaseException:
         destination.unlink(missing_ok=True)
         raise

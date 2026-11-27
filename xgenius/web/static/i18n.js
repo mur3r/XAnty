@@ -93,6 +93,11 @@ rtc_hint|Отличающийся публичный IP может указыв�
 dns_lookups|Получено DNS-запросов: {n} из {total}|DNS lookups observed: {n} of {total}|Отримано DNS-запитів: {n} із {total}
 dns_hint|Сравните операторов с ожидаемыми DNS прокси/VPN. Другая страна или публичный DNS сами по себе не доказывают утечку; неполный тест не считается успешным.|Compare operators with your expected proxy/VPN DNS. Another country or a public resolver alone does not prove a leak; incomplete tests are not passes.|Порівняйте операторів з очікуваними DNS проксі/VPN. Інша країна або публічний DNS самі по собі не доводять витоку; неповний тест не вважається успішним.
 package_integrity_hint|Новые пакеты проверяются по SHA-256 перед импортом. Старые пакеты без контрольных сумм показывают предупреждение.|New packages are verified with SHA-256 before import. Legacy packages without checksums show a warning.|Нові пакети перевіряються за SHA-256 перед імпортом. Старі пакети без контрольних сум показують попередження.
+package_damaged|Файл профилей повреждён или скопирован не полностью. Создайте файл передачи заново в актуальной версии XAnty и дождитесь проверки перед отправкой.|The profile file is damaged or incomplete. Create it again in the latest XAnty and wait for verification before sharing.|Файл профілів пошкоджений або скопійований не повністю. Створіть файл передачі заново в актуальній версії XAnty та дочекайтеся перевірки перед надсиланням.
+package_checking|Файл загружен. Проверяем целостность…|File uploaded. Checking integrity…|Файл завантажено. Перевіряємо цілісність…
+verifying_export|Проверяем готовый файл профилей|Verifying the completed profile file|Перевіряємо готовий файл профілів
+package_upload_incomplete|Файл загрузился не полностью. Выберите исходный файл и повторите попытку.|The file upload is incomplete. Choose the original file and try again.|Файл завантажився не повністю. Виберіть оригінальний файл і повторіть спробу.
+import_package_intro|Выберите файл .xanty, созданный в разделе «Передача профилей». После проверки программа импортирует профили с настройками, прокси, cookies и данными браузера.|Choose the .xanty file created in Profile transfer. After verification, the app imports profiles with settings, proxies, cookies and browser data.|Виберіть файл .xanty, створений у розділі «Передача профілів». Після перевірки програма імпортує профілі з налаштуваннями, проксі, cookies та даними браузера.
 integrity_verified|Целостность: SHA-256 проверен|Integrity: SHA-256 verified|Цілісність: SHA-256 перевірено
 integrity_unavailable|Контрольных сумм нет — целостность не подтверждена|No checksums — integrity unverified|Контрольних сум немає — цілісність не підтверджена
 profile_already_open|Профиль уже открыт в другом сеансе. Закройте его перед продолжением.|Profile is already open in another session. Close it before continuing.|Профіль уже відкритий в іншому сеансі. Закрийте його перед продовженням.
@@ -486,6 +491,8 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
     'Could not read the local browser cookie database':'read_session_failed', 'Could not read the saved portable session':'read_session_failed',
     'Could not read the XAnty profile package':'invalid_package', 'This is not a valid XAnty profile package':'invalid_package',
     'Unsafe path in profile package':'unsafe_package', 'Unexpected file in profile package':'unsafe_package',
+    'Profile package upload is incomplete. Choose the original file and try again.':'package_upload_incomplete',
+    'Invalid profile package upload size':'package_upload_incomplete',
     'Unsupported XAnty profile package version':'package_version',
     'Profile package is missing session files. Export the profiles again.':'package_missing_session',
     'Cannot save profile files. Check write access to the workspace folder.':'workspace_access',
@@ -499,6 +506,7 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   });
   function error(value) {
     const text=String(value);
+    if(text.startsWith('Profile package integrity '))return t('package_damaged');
     const rotationHttp=text.match(/^Proxy rotation returned HTTP (\d+)\./);
     if(rotationHttp)return t('rotation_http',{code:rotationHttp[1]});
     if(text.startsWith('Ошибка входа: '))return error(text.slice(14));

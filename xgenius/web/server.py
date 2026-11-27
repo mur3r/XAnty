@@ -377,11 +377,16 @@ class WebApp(WorkspaceApiMixin):
             raise ActionError('Another transfer operation is running')
         reader = await request.multipart()
         source = self.transfer_directory() / f'upload-{uuid.uuid4().hex}.xanty'
-        duplicates, received = 'rename', False
+        duplicates, received, expected_size, count = 'rename', False, None, 0
         try:
             async for part in reader:
                 if part.name == 'duplicates':
                     duplicates = await part.text()
+                elif part.name == 'file_size':
+                    value = await part.text()
+                    if not value.isascii() or not value.isdecimal() or len(value) > 12 or not 0 < int(value) <= 64 * 1024 ** 3:
+                        raise ActionError('Invalid profile package upload size')
+                    expected_size = int(value)
                 elif part.name == 'file' and not received:
                     received = True
                     count = 0
@@ -398,6 +403,8 @@ class WebApp(WorkspaceApiMixin):
                     await part.release()
             if not received:
                 raise ActionError('Choose an XAnty profile package')
+            if expected_size is not None and count != expected_size:
+                raise ActionError('Profile package upload is incomplete. Choose the original file and try again.')
             if duplicates not in ('rename', 'skip'):
                 raise ActionError('Choose rename or skip for existing profiles')
             preview = await asyncio.to_thread(inspect_package, source)

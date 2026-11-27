@@ -132,7 +132,7 @@ class BackupTests(unittest.TestCase):
             observed.append(kwargs['processed'])
 
         self.manager.run(self.accounts, progress=progress)
-        self.assertEqual(observed, [1, 2])
+        self.assertEqual(observed, [1, 2, 2, 2])
         for account in self.accounts:
             with ProfileLease.acquire(self.config, account['username']):
                 pass
