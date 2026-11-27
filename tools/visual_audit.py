@@ -148,7 +148,7 @@ def audit_file_control(page):
     expect(control.locator('[data-file-name]')).to_have_text(page.evaluate("t('quality_file_empty')"))
     field = control.locator('input[type=file]')
     cookie_file = '.json' in (field.get_attribute('accept') or '')
-    filename = 'QA-�����-�����.json' if cookie_file else 'QA-�����-�����.xanty'
+    filename = 'QA-довга-назва.json' if cookie_file else 'QA-довга-назва.xanty'
     field.set_input_files(dict(name=filename, mimeType='application/json' if cookie_file else 'application/zip',
                               buffer=b'[]' if cookie_file else b'synthetic, not an imported archive'))
     expect(control.locator('[data-file-name]')).to_have_text(filename)
