@@ -34,7 +34,7 @@ def request_rotation(url):
     with requests.Session() as session:
         session.trust_env = False
         try:
-            response = session.get(url, timeout=(6, 20), allow_redirects=False,
+            response = session.get(url, timeout=(6, 120), allow_redirects=False,
                                    headers={'Cache-Control': 'no-cache'})
             if response.status_code == 429:
                 raise ProxyRotationError('Proxy rotation is rate limited. Wait and try again.')
@@ -46,7 +46,8 @@ def request_rotation(url):
                 data = None
             if isinstance(data, dict) and (
                     data.get('success') is False or data.get('ok') is False
-                    or str(data.get('status', '')).lower() in ('error', 'fail', 'failed')
+                    or str(data.get('status', '')).lower() in ('error', 'fail', 'failed', 'failure')
+                    or str(data.get('result', '')).lower() in ('error', 'fail', 'failed', 'failure')
                     or data.get('error')):
                 raise ProxyRotationError('The proxy provider rejected the rotation request. Check the link and provider limits.')
         except requests.exceptions.Timeout:

@@ -30,6 +30,12 @@ rotation_unreachable|Не удалось отправить запрос на р
 rotation_http|Провайдер ротации вернул HTTP {code}. Проверьте ссылку и ограничения смены IP.|Rotation provider returned HTTP {code}. Check the link and limits.|Провайдер ротації повернув HTTP {code}. Перевірте посилання та обмеження зміни IP.
 proxy_rotation_url|Ссылка ротации прокси|Proxy rotation URL|Посилання ротації проксі
 proxy_rotation_hint|Вставьте ссылку смены IP от провайдера прокси. Для ротации нажмите «Сменить IP» рядом с прокси.|Paste your provider's IP rotation link. Use Rotate IP next to the proxy to send the request.|Вставте посилання зміни IP від провайдера проксі. Для ротації натисніть «Змінити IP» біля проксі.
+proxy_ip_unreachable|Не удалось определить внешний IP через прокси. Проверьте адрес, порт и доступ к сети.|Cannot determine the external IP through the proxy. Check the address, port and network access.|Не вдалося визначити зовнішній IP через проксі. Перевірте адресу, порт і доступ до мережі.
+proxy_socks_auth|Ошибка авторизации SOCKS5. Проверьте логин и пароль прокси.|SOCKS5 authentication failed. Check the proxy login and password.|Помилка авторизації SOCKS5. Перевірте логін і пароль проксі.
+proxy_ssl_error|Не удалось проверить HTTPS через прокси: ошибка сертификата.|Cannot verify HTTPS through the proxy: certificate error.|Не вдалося перевірити HTTPS через проксі: помилка сертифіката.
+proxy_ip_invalid|Сервис проверки не вернул корректный IP. Повторите проверку.|The check service did not return a valid IP. Try again.|Сервіс перевірки не повернув коректний IP. Повторіть перевірку.
+proxy_ip_http|Сервис проверки IP вернул HTTP {code} через прокси. Повторите проверку.|The IP check service returned HTTP {code} through the proxy. Try again.|Сервіс перевірки IP повернув HTTP {code} через проксі. Повторіть перевірку.
+proxy_format_invalid|Укажите host:port:логин:пароль, http://логин:пароль@host:port или socks5://логин:пароль@host:port.|Use host:port:login:password, http://login:password@host:port or socks5://login:password@host:port.|Вкажіть host:port:логін:пароль, http://логін:пароль@host:port або socks5://логін:пароль@host:port.
 proxy_rotate|Сменить IP|Rotate IP|Змінити IP
 proxy_rotating|Меняем IP…|Rotating IP…|Змінюємо IP…
 proxy_rotation_changed|IP прокси изменён: {ip}|Proxy IP changed: {ip}|IP проксі змінено: {ip}
@@ -256,7 +262,7 @@ username|Логин X|X username|Логін X
 username_hint|Без @. Например, my_account.|Without @. For example, my_account.|Без @. Наприклад, my_account.
 proxy|Прокси|Proxy|Проксі
 no_proxy|Не указан|Not set|Не вказано
-proxy_hint|HTTP-прокси: host:port:login:password или http://login:password@host:port|HTTP proxy: host:port:login:password or http://login:password@host:port|HTTP-проксі: host:port:login:password або http://login:password@host:port
+proxy_hint|HTTP и SOCKS5: host:port:логин:пароль или адрес со схемой http:// / socks5://. Для старых строк тип определяется автоматически.|HTTP and SOCKS5: host:port:login:password or a URL with http:// / socks5://. Legacy strings are detected automatically.|HTTP і SOCKS5: host:port:логін:пароль або адреса зі схемою http:// / socks5://. Для старих рядків тип визначається автоматично.
 check_proxy|Проверить прокси|Check proxy|Перевірити проксі
 checking_proxy|Проверяем прокси…|Checking proxy…|Перевіряємо проксі…
 proxy_failed|Проверка прокси не пройдена|Proxy check failed|Перевірку проксі не пройдено
@@ -411,7 +417,7 @@ profile_details_unavailable|Настройки профиля недоступн
 empty_remote_cookies|Dolphin не вернул cookies. Проверьте сессию вручную.|Dolphin returned no cookies. Check the session manually.|Dolphin не повернув cookies. Перевірте сесію вручну.
 no_x_cookies|В профиле нет cookies X/Twitter.|No X/Twitter cookies in this profile.|У профілі немає cookies X/Twitter.
 unsupported_proxy|Этот тип прокси пока не поддерживается. Добавьте HTTP-прокси в XAnty.|This proxy type is not supported yet. Add an HTTP proxy in XAnty.|Цей тип проксі поки не підтримується. Додайте HTTP-проксі в XAnty.
-missing_proxy|Добавьте HTTP-прокси перед запуском профиля.|Add an HTTP proxy before opening the profile.|Додайте HTTP-проксі перед запуском профілю.
+missing_proxy|Добавьте HTTP- или SOCKS5-прокси перед запуском профиля.|Add an HTTP or SOCKS5 proxy before opening the profile.|Додайте HTTP- або SOCKS5-проксі перед запуском профілю.
 incomplete_proxy|Dolphin не вернул полный адрес прокси. Укажите его в XAnty.|Dolphin did not provide the complete proxy address. Set it in XAnty.|Dolphin не повернув повну адресу проксі. Вкажіть її в XAnty.
 source_os|Исходный профиль использует другую ОС. XAnty запускает Chrome для Windows.|The source profile uses a different OS. XAnty runs Windows Chrome.|Вихідний профіль використовує іншу ОС. XAnty запускає Chrome для Windows.
 internal_username|Создан внутренний идентификатор. Исходное название профиля Dolphin сохранено.|An internal username was generated. The original Dolphin profile name is preserved.|Створено внутрішній ідентифікатор. Вихідну назву профілю Dolphin збережено.
@@ -498,6 +504,11 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
     'Cannot save profile files. Check write access to the workspace folder.':'workspace_access',
     'Not enough disk space to import profiles. Free space in the workspace folder.':'workspace_space',
     'Profile list changed during import; please retry':'profile_list_changed',
+    'SOCKS5 proxy authentication failed. Check login and password.':'proxy_socks_auth',
+    'Cannot check the external IP through the proxy. Check its network access.':'proxy_ip_unreachable',
+    'HTTPS check failed through the proxy (certificate error).':'proxy_ssl_error',
+    'IP check did not return a valid public IP.':'proxy_ip_invalid',
+    'Invalid proxy. Use host:port:user:password, http://user:password@host:port or socks5://user:password@host:port.':'proxy_format_invalid',
     'Proxy authentication failed (407). Check login and password.':'proxy_auth_failed',
     'Cannot connect through the proxy. Check host, port and access.':'proxy_connect_failed',
     'Proxy timed out. Check the address and network.':'proxy_timeout',
@@ -506,6 +517,8 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   });
   function error(value) {
     const text=String(value);
+    const ipHttp=text.match(/^IP check returned HTTP (\d+) through the proxy\./);
+    if(ipHttp)return t('proxy_ip_http',{code:ipHttp[1]});
     if(text.startsWith('Profile package integrity '))return t('package_damaged');
     const rotationHttp=text.match(/^Proxy rotation returned HTTP (\d+)\./);
     if(rotationHttp)return t('rotation_http',{code:rotationHttp[1]});

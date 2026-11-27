@@ -7,6 +7,11 @@ from xgenius import proxy_service as service
 
 
 class LocationTests(unittest.TestCase):
+    def setUp(self):
+        resolver = patch.object(service, "resolve_proxy", side_effect=lambda proxy: proxy)
+        resolver.start()
+        self.addCleanup(resolver.stop)
+
     def test_location_is_normalized_and_request_uses_the_checked_proxy(self):
         class Session:
             def __enter__(self):
@@ -28,6 +33,11 @@ class LocationTests(unittest.TestCase):
             result = service.lookup_proxy_location(service.parse_proxy('host:80:u:secret'), '8.8.8.8')
         self.assertEqual(result, {'country_code': 'US', 'country': 'United States',
                                   'region': 'Florida', 'city': 'Miami'})
+
+    def test_equivalent_ipv6_response_forms_are_accepted(self):
+        result = service.parse_location_response({'success': True, 'ip': '2001:db8:0:0:0:0:0:1',
+            'country_code': 'US', 'city': 'Miami'}, '2001:db8::1')
+        self.assertEqual(result['city'], 'Miami')
 
     def test_mismatched_or_malformed_location_is_not_accepted(self):
         for payload in ({'success': False}, {'success': True, 'ip': '1.1.1.1', 'country_code': 'US'},

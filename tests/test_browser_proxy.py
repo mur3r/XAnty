@@ -55,7 +55,7 @@ class BrowserProxyTests(unittest.TestCase):
     def test_unavailable_ip_service_uses_an_independent_service_through_the_same_proxy(self):
         connection=ChromeProxyConnection(statuses=[503,200])
         self.assertEqual(self.verify(connection),'203.0.113.90')
-        self.assertEqual([urlsplit(url).hostname for url in connection.probes],['api.ipify.org','checkip.amazonaws.com'])
+        self.assertEqual([urlsplit(url).hostname for url in connection.probes],['api64.ipify.org','checkip.amazonaws.com'])
 
     def test_ip_service_connection_reset_uses_the_other_service(self):
         connection = ChromeProxyConnection(errors=['net::ERR_CONNECTION_RESET', None])
@@ -108,7 +108,7 @@ class ChromeProxyConnection:
             expression = params['expression']
             import re
             url = re.search(r'fetch\(\s*"(https://[^"]+)"', expression).group(1)
-            assert urlsplit(url).hostname in ('api.ipify.org','checkip.amazonaws.com')
+            assert urlsplit(url).hostname in ('api.ipify.org','api64.ipify.org','checkip.amazonaws.com')
             if urlsplit(url).hostname=='api.ipify.org':assert parse_qs(urlsplit(url).query)['format'] == ['json']
             parsed=urlsplit(url)
             self.probe_url=urlunsplit((parsed.scheme,parsed.netloc,parsed.path or '/',parsed.query,parsed.fragment))

@@ -1,11 +1,15 @@
-"""Validate HTTP proxies and check the public IP without a direct fallback."""
+"""Validate HTTP/SOCKS5 proxies and check the public IP without a direct fallback."""
 
 import ipaddress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import socket
+import time
+import threading
 from urllib.parse import quote, unquote, urlsplit
 
 
-IP_CHECK_URL = "https://api.ipify.org/?format=json"
+IP_CHECK_URL = "https://api64.ipify.org/?format=json"
+IP_CHECK_URLS = (IP_CHECK_URL, "https://checkip.amazonaws.com/", "https://api.ipify.org/?format=json")
 LOCATION_URL = "https://ipwho.is/"
 
 
@@ -19,17 +23,19 @@ class HttpProxy:
     port: int
     username: str = ""
     password: str = ""
+    scheme: str = "http"
 
     @property
     def server(self):
         host = f"[{self.host}]" if ":" in self.host else self.host
-        return f"http://{host}:{self.port}"
+        return f"{self.scheme}://{host}:{self.port}"
 
     @property
     def requests_url(self):
-        if not self.username:
-            return self.server
-        return f"http://{quote(self.username, safe='')}:{quote(self.password, safe='')}@{self.server[7:]}"
+        scheme = 'socks5h' if self.scheme == 'socks5' else self.scheme
+        address = self.server.split('://', 1)[1]
+        auth = f"{quote(self.username, safe='')}:{quote(self.password, safe='')}@" if self.username else ''
+        return f'{scheme}://{auth}{address}'
 
 
 def parse_proxy(value: str) -> HttpProxy:
@@ -45,7 +51,7 @@ def parse_proxy(value: str) -> HttpProxy:
         raw = f"http://{raw}"
     try:
         parsed = urlsplit(raw)
-        if parsed.scheme != "http":
+        if parsed.scheme not in ("http", "socks5", "socks5h"):
             raise ValueError("unsupported scheme")
         if parsed.path or parsed.query or parsed.fragment:
             raise ValueError("unexpected URL path")
@@ -59,8 +65,8 @@ def parse_proxy(value: str) -> HttpProxy:
         if any(c in host for c in ("/", "@", "\\", ",", ";", "=", "<", ">", "|")):
             raise ValueError("invalid host")
     except (ValueError, TypeError) as exc:
-        raise ProxyCheckError("Invalid HTTP proxy. Use host:port:user:password or http://user:password@host:port.") from None
-    return HttpProxy(host, port, username, password)
+        raise ProxyCheckError("Invalid proxy. Use host:port:user:password, http://user:password@host:port or socks5://user:password@host:port.") from None
+    return HttpProxy(host, port, username, password, 'socks5' if parsed.scheme.startswith('socks5') else 'http')
 
 
 def parse_ip_response(body: str) -> str:
@@ -74,34 +80,88 @@ def parse_ip_response(body: str) -> str:
         raise ProxyCheckError("IP check did not return a valid public IP.") from None
 
 
-def check_proxy(proxy: HttpProxy) -> str:
-    """Check an HTTPS CONNECT request; both protocols are pinned to the proxy."""
-    import requests
+_PROTOCOL_CACHE = {}
+_PROTOCOL_LOCK = threading.Lock()
 
+
+def _socks5_port(host: str, port: int) -> bool:
+    """Identify SOCKS without sending credentials or touching a rotation URL."""
+    key = (host.lower(), port)
+    with _PROTOCOL_LOCK:
+        cached = _PROTOCOL_CACHE.get(key)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    detected = False
+    try:
+        with socket.create_connection((host, port), timeout=2) as connection:
+            connection.settimeout(1)
+            connection.sendall(b'\x05\x02\x00\x02')
+            answer = b''
+            while len(answer) < 2:
+                part = connection.recv(2 - len(answer))
+                if not part:
+                    break
+                answer += part
+            detected = answer in (b'\x05\x00', b'\x05\x02')
+    except OSError:
+        pass
+    with _PROTOCOL_LOCK:
+        if len(_PROTOCOL_CACHE) >= 512:
+            _PROTOCOL_CACHE.clear()
+        _PROTOCOL_CACHE[key] = (time.monotonic() + (300 if detected else 5), detected)
+    return detected
+
+
+def resolve_proxy(proxy: HttpProxy) -> HttpProxy:
+    # Older saved profile strings have no protocol and were treated as HTTP.
+    # A positive SOCKS greeting is required before changing their interpretation.
+    return replace(proxy, scheme='socks5') if proxy.scheme == 'http' and _socks5_port(proxy.host, proxy.port) else proxy
+
+
+def check_proxy(proxy: HttpProxy) -> str:
+    """Verify the exit through the configured HTTP/SOCKS endpoint only."""
+    import requests
+    proxy = resolve_proxy(proxy)
+    last_error = 'Cannot check the external IP through the proxy. Check its network access.'
     with requests.Session() as session:
         session.trust_env = False
-        session.proxies = {"http": proxy.requests_url, "https": proxy.requests_url}
-        try:
-            response = session.get(IP_CHECK_URL, timeout=(6, 15), headers={"Cache-Control": "no-cache"})
-            if response.status_code == 407:
-                raise ProxyCheckError("Proxy authentication failed (407). Check login and password.")
-            if response.status_code != 200:
-                raise ProxyCheckError(f"IP check returned HTTP {response.status_code} through the proxy.")
-            return parse_ip_response(response.text)
-        except requests.exceptions.Timeout:
-            raise ProxyCheckError("Proxy timed out. Check the address and network.") from None
-        except requests.exceptions.ProxyError as exc:
-            if "407" in str(exc):
-                raise ProxyCheckError("Proxy authentication failed (407). Check login and password.") from None
-            raise ProxyCheckError("Cannot connect through the proxy. Check host, port and access.") from None
-        except requests.exceptions.SSLError:
-            raise ProxyCheckError("HTTPS check failed through the proxy (certificate error).") from None
-        except requests.exceptions.RequestException:
-            raise ProxyCheckError("Cannot check the external IP through the proxy. Check its network access.") from None
+        session.proxies = {'http': proxy.requests_url, 'https': proxy.requests_url}
+        for endpoint in IP_CHECK_URLS:
+            try:
+                response = session.get(endpoint, timeout=(4, 8), allow_redirects=False,
+                                       headers={'Cache-Control': 'no-cache'})
+                if response.status_code == 407:
+                    raise ProxyCheckError('Proxy authentication failed (407). Check login and password.')
+                if response.status_code != 200:
+                    last_error = f'IP check returned HTTP {response.status_code} through the proxy.'
+                    continue
+                try:
+                    return parse_ip_response(response.text)
+                except ProxyCheckError as exc:
+                    last_error = str(exc)
+            except requests.exceptions.Timeout:
+                last_error = 'Proxy timed out. Check the address and network.'
+            except requests.exceptions.ProxyError as exc:
+                if '407' in str(exc):
+                    raise ProxyCheckError('Proxy authentication failed (407). Check login and password.') from None
+                last_error = 'Cannot connect through the proxy. Check host, port and access.'
+            except requests.exceptions.SSLError:
+                last_error = 'HTTPS check failed through the proxy (certificate error).'
+            except requests.exceptions.RequestException as exc:
+                # SOCKS authentication errors may be nested inside ConnectionError.
+                cause = str(exc).lower()
+                if proxy.scheme == 'socks5' and ('authentication failed' in cause or 'authentication methods' in cause):
+                    raise ProxyCheckError('SOCKS5 proxy authentication failed. Check login and password.') from None
+                last_error = 'Cannot check the external IP through the proxy. Check its network access.'
+    raise ProxyCheckError(last_error) from None
 
 
 def parse_location_response(data: dict, ip: str) -> dict:
-    if not isinstance(data, dict) or data.get('success') is not True or data.get('ip') != ip:
+    try:
+        matches = isinstance(data, dict) and data.get('success') is True and ipaddress.ip_address(data.get('ip')) == ipaddress.ip_address(ip)
+    except (ValueError, TypeError):
+        matches = False
+    if not matches:
         raise ProxyCheckError('Proxy location is unavailable. The proxy IP check succeeded.')
     code = data.get('country_code', '')
     if not isinstance(code, str) or len(code) != 2 or not code.isascii() or not code.isalpha():
@@ -117,6 +177,7 @@ def lookup_proxy_location(proxy: HttpProxy, ip: str) -> dict:
     """Geolocate the verified exit IP through the same proxy, never directly."""
     import requests
     ip = str(ipaddress.ip_address(ip))
+    proxy = resolve_proxy(proxy)
     with requests.Session() as session:
         session.trust_env = False
         session.proxies = {'http': proxy.requests_url, 'https': proxy.requests_url}

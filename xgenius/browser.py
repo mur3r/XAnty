@@ -92,9 +92,16 @@ class BrowserManager:
         proxy = parse_proxy(credentials.proxy)
         loop = asyncio.get_event_loop()
         extension_dir = None
+        proxy_bridge = None
         browser = None
         proxy_verified = False
         try:
+            from xgenius.proxy_service import resolve_proxy
+            proxy = await loop.run_in_executor(None, resolve_proxy, proxy)
+            if proxy.scheme == 'socks5':
+                from xgenius.socks_bridge import SocksBridge
+                proxy_bridge = SocksBridge(proxy)
+                proxy = proxy_bridge.proxy
             chrome_bin = self.config.chrome_path
             driver_path = self.config.chromedriver_path
             options = Options()
@@ -183,6 +190,7 @@ class BrowserManager:
             
             browser = await loop.run_in_executor(None, lambda: webdriver.Chrome(service=driver_service, options=options))
             browser._xg_proxy_extension = extension_dir
+            browser._xg_proxy_bridge = proxy_bridge
             browser_lock(browser)
             track_browser_process(browser)
             if not credentials.headless:
@@ -255,6 +263,8 @@ class BrowserManager:
                 await loop.run_in_executor(None, hard_close_browser, browser)
             elif extension_dir is not None:
                 extension_dir.cleanup()
+            if proxy_bridge is not None:
+                proxy_bridge.cleanup()
             if isinstance(exc, (ProxyCheckError, ProfileSettingsError, BrowserPolicyError, SearchConfigurationError)):
                 raise
             if browser is None or proxy_verified:

@@ -10,7 +10,7 @@ from pathlib import Path
 def build(onefile: bool = False, dist_dir: Path = None) -> Path:
     if sys.platform != "win32":
         raise RuntimeError("Build XAnty.exe on Windows.")
-    required = ("PyInstaller", "webview", "selenium", "selenium_stealth", "aiohttp", "psutil", "requests", "cryptography")
+    required = ("PyInstaller", "webview", "selenium", "selenium_stealth", "aiohttp", "psutil", "requests", "cryptography", "socks")
     missing = [name for name in required if importlib.util.find_spec(name) is None]
     if missing:
         raise RuntimeError("Missing dependencies: " + ", ".join(missing) +
@@ -24,6 +24,7 @@ def build(onefile: bool = False, dist_dir: Path = None) -> Path:
                "--add-data", str(root / 'xgenius' / 'update_config.json') + os.pathsep + 'xgenius',
                "--add-data", str(root / 'xgenius' / 'update_helper.ps1') + os.pathsep + 'xgenius',
                "--icon", str(static / "assets" / "app.ico"),
+               "--hidden-import", "socks", "--hidden-import", "urllib3.contrib.socks",
                "--collect-data", "selenium_stealth",
                "--collect-submodules", "selenium",
                "--collect-all", "webview", str(root / "main.py")]

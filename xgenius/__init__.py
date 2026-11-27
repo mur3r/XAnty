@@ -4,7 +4,7 @@ import warnings
 
 import urllib3
 
-__version__ = "2026.11.27.6"
+__version__ = "2026.11.27.7"
 
 # Подавляем предупреждения о устаревшем get_event_loop и шум urllib3/requests
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="asyncio")

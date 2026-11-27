@@ -27,7 +27,7 @@ class ProxyFormatTests(unittest.TestCase):
         self.assertEqual(parse_proxy("proxy.example:8080").requests_url, "http://proxy.example:8080")
 
     def test_missing_invalid_and_unsupported_proxy_fail_closed(self):
-        for raw in ("", "not-a-proxy", "host:99999:user:pass", "socks5://host:1080", "host:80:user:",
+        for raw in ("", "not-a-proxy", "host:99999:user:pass", "socks4://host:1080", "host:80:user:",
                     "http://proxy.example,direct:8080", "http://http=proxy.example:8080"):
             with self.subTest(raw=raw), self.assertRaises(ProxyCheckError):
                 parse_proxy(raw)
@@ -39,6 +39,11 @@ class ProxyFormatTests(unittest.TestCase):
 
 
 class ProxyCheckTests(unittest.TestCase):
+    def setUp(self):
+        resolver = patch.object(module, "resolve_proxy", side_effect=lambda proxy: proxy)
+        resolver.start()
+        self.addCleanup(resolver.stop)
+
     def _fake_requests(self, status=200, text='{"ip":"203.0.113.20"}', error=None):
         class RequestException(Exception):
             pass
@@ -86,6 +91,19 @@ class ProxyCheckTests(unittest.TestCase):
         self.assertEqual(proxies["http"], "http://user:pass@host:8000")
         self.assertEqual(proxies["https"], proxies["http"])
         self.assertIn("timeout", kwargs)
+
+    def test_an_unavailable_ip_service_falls_back_without_using_a_direct_connection(self):
+        import requests
+        from unittest.mock import Mock
+        with requests.Session() as session:
+            session.get = Mock(side_effect=[requests.exceptions.ConnectionError('reset'),
+                                           types.SimpleNamespace(status_code=200, text='203.0.113.25')])
+            with patch('requests.Session', return_value=session):
+                self.assertEqual(check_proxy(parse_proxy('host:8000:user:pass')), '203.0.113.25')
+            self.assertEqual(session.get.call_count, 2)
+            self.assertFalse(session.trust_env)
+            self.assertEqual(session.proxies['http'], session.proxies['https'])
+            self.assertEqual(session.get.call_args.kwargs['allow_redirects'], False)
 
     def test_authentication_failure_has_safe_message(self):
         fake, _, _ = self._fake_requests(status=407)
