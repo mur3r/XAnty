@@ -264,6 +264,49 @@ def audit_notes_and_logs(page, label):
     expect(page.locator('#logs')).to_contain_text('Buffered while viewing profiles')
 
 
+def audit_customization(page, label):
+    theme = page.locator('html').get_attribute('data-theme')
+    accent = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim().toUpperCase()")
+    toggle = page.locator('#btn-sidebar-toggle')
+    if page.viewport_size['width'] > 650:
+        before = page.locator('.main').evaluate('el=>el.getBoundingClientRect().width')
+        toggle.click()
+        expect(page.locator('#workspace-sidebar')).not_to_be_visible()
+        page.wait_for_function("S.preferences.folders_collapsed===true&&!document.querySelector('#btn-sidebar-toggle').disabled")
+        assert page.locator('.main').evaluate('el=>el.getBoundingClientRect().width') > before
+        page.reload(wait_until='networkidle')
+        expect(page.locator('#workspace-sidebar')).not_to_be_visible()
+        toggle.click()
+        page.wait_for_function("S.preferences.folders_collapsed===false&&!document.querySelector('#btn-sidebar-toggle').disabled")
+        expect(page.locator('#workspace-sidebar')).to_be_visible()
+    else:
+        open_navigation(page)
+        expect(page.locator('#workspace-sidebar')).to_be_visible()
+        close_navigation(page)
+    page.locator('.rail [data-tool="browser_settings"]').click()
+    expect(modal(page).locator('input[type="color"]')).to_have_count(6)
+    page.evaluate("toast('Synthetic feedback\\nA second line\\nA third line','ok',0)")
+    modal(page).locator('[data-color-key="accent"]').evaluate("el=>{el.value='#2e9cca';el.dispatchEvent(new Event('input',{bubbles:true}));}")
+    assert page.evaluate("document.documentElement.style.getPropertyValue('--color-accent')") == '#2E9CCA'
+    modal(page).locator('.modal-foot [data-i18n="cancel"]').click()
+    page.wait_for_function("!document.querySelector('.modal-overlay')")
+    page.locator('#toasts .toast-close').first.click()
+    assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim().toUpperCase()") == accent
+    page.locator('.rail [data-tool="browser_settings"]').click()
+    modal(page).locator('[data-color-key="accent"]').evaluate("el=>{el.value='#2e9cca';el.dispatchEvent(new Event('input',{bubbles:true}));}")
+    modal(page).locator('.modal-foot [data-i18n="save"]').click()
+    page.wait_for_function("!document.querySelector('.modal-overlay')")
+    page.reload(wait_until='networkidle')
+    assert page.evaluate("document.documentElement.style.getPropertyValue('--color-accent')") == '#2E9CCA'
+    page.locator('.rail [data-tool="browser_settings"]').click()
+    screenshot(page, label + '-custom-colors')
+    modal(page).locator('[data-colors-reset]').click()
+    modal(page).locator('.modal-foot [data-i18n="save"]').click()
+    page.wait_for_function("!document.querySelector('.modal-overlay')")
+    assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim().toUpperCase()") == accent
+    assert page.locator('html').get_attribute('data-theme') == theme
+
+
 def full_flow(page, label):
 
     initial = page.locator('html').get_attribute('data-theme')
@@ -369,7 +412,7 @@ def full_flow(page, label):
     screenshot(page, label + '-columns')
     close_modal(page)
     page.locator('.profile-management-toolbar [data-tool="browser_settings"]').click()
-    expect(modal(page).locator('[name]')).to_have_count(2)
+    expect(modal(page).locator('[name]')).to_have_count(9)
     screenshot(page, label + '-browser-settings')
     close_modal(page)
 
@@ -473,6 +516,7 @@ def main():
                             screenshot(page, label + '-profiles', embed=(theme, language, size) in [('dark', 'ru', 'laptop'), ('light', 'en', 'desktop')])
                             audit_editor(page, label + '-editor', embed=(theme, language, size) == ('light', 'uk', 'narrow'),
                                          nested=(theme, language, size) == ('dark', 'ru', 'laptop'))
+                            audit_customization(page, label)
                             if (theme, language, size) in [('dark', 'ru', 'laptop'), ('light', 'en', 'desktop'), ('dark', 'uk', 'narrow')]:
                                 full_flow(page, label)
                             assert not errors, errors

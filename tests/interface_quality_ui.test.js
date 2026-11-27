@@ -36,7 +36,7 @@ test('folder choice, backdrop, viewport changes and repeated initialization stay
  const e=environment(),toggle=e.nodes.get('#btn-sidebar-toggle');
  toggle.onclick();e.nodes.get('#workspace-sidebar').click({target:{closest:()=>({})}});assert.equal(toggle.attrs['aria-expanded'],'false');
  toggle.onclick();e.nodes.get('#navigation-backdrop').onclick();assert.equal(toggle.attrs['aria-expanded'],'false');
- toggle.onclick();e.media.matches=false;e.resize();assert.equal(toggle.attrs['aria-expanded'],'false');
+ toggle.onclick();e.media.matches=false;e.resize();assert.equal(toggle.attrs['aria-expanded'],'true');
  const before=e.handlers();vm.runInContext('InterfaceQuality.init()',e.c);assert.equal(e.handlers(),before);
 });
 test('accessible labels are localized in all three supported languages',()=>{
@@ -46,4 +46,28 @@ test('accessible labels are localized in all three supported languages',()=>{
  vm.runInContext(fs.readFileSync('xgenius/web/static/i18n.js','utf8'),c);
  const labels=[];for(const lang of ['ru','en','uk']){vm.runInContext('I18N.set("'+lang+'")',c);labels.push(target.label);}
  assert.equal(new Set(labels).size,3);for(const label of labels)assert.ok(label&&label!=='select_page');
+});
+
+
+test('desktop panel collapse persists and keeps selected folders visible again after expansion',async()=>{
+ const e=environment();e.media.matches=false;e.resize();e.c.S={preferences:{}};
+ const calls=[];e.c.api=async(method,path,body)=>{calls.push({method,path,body});return body;};
+ const toggle=e.nodes.get('#btn-sidebar-toggle'),sidebar=e.nodes.get('#workspace-sidebar');
+ await toggle.onclick();assert.equal(e.nodes.get('#screen-main').classList.contains('folders-collapsed'),true);
+ assert.equal(sidebar.inert,true);assert.equal(toggle.attrs['aria-expanded'],'false');
+ assert.equal(calls[0].body.folders_collapsed,true);assert.equal(e.c.S.preferences.folders_collapsed,true);
+ await toggle.onclick();assert.equal(sidebar.inert,false);assert.equal(toggle.attrs['aria-expanded'],'true');
+ assert.equal(calls[1].body.folders_collapsed,false);
+});
+
+test('restoring preferences survives resizing through compact mode and a failed save restores the panel',async()=>{
+ const e=environment();e.events.get('appearancechange').fn({detail:{folders_collapsed:true}});
+ e.media.matches=false;e.resize();assert.equal(e.nodes.get('#screen-main').classList.contains('folders-collapsed'),true);
+ e.media.matches=true;e.resize();await e.nodes.get('#btn-sidebar-toggle').onclick();
+ assert.equal(e.nodes.get('#screen-main').classList.contains('navigation-open'),true);
+ e.media.matches=false;e.resize();assert.equal(e.nodes.get('#screen-main').classList.contains('folders-collapsed'),true);
+ e.c.api=async()=>{throw Error('Cannot save');};
+ await e.nodes.get('#btn-sidebar-toggle').onclick();
+ assert.equal(e.nodes.get('#screen-main').classList.contains('folders-collapsed'),true);
+ assert.equal(e.nodes.get('#btn-sidebar-toggle').disabled,false);
 });

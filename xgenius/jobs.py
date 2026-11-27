@@ -45,7 +45,7 @@ class Job:
             result['warnings'] = sum(bool(row.get('warnings')) for row in self.report)
             result['download_ready'] = self.status == 'completed' and self.file_path is not None
             if isinstance(self.result,dict):
-                for key in ('integrity','integrity_algorithm','verified_files'):
+                for key in ('integrity','integrity_algorithm','verified_files','saved_path'):
                     if key in self.result:
                         result[key]=self.result[key]
             if details:

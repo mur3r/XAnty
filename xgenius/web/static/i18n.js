@@ -670,3 +670,34 @@ release_notes_hint|Все предыдущие обновления доступ
 `;
  for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
 }
+
+{
+ const rows=`
+appearance_title|Цвета интерфейса|Interface colors|Кольори інтерфейсу
+appearance_dark|Тёмная тема|Dark theme|Темна тема
+appearance_light|Светлая тема|Light theme|Світла тема
+appearance_accent|Акцент и кнопки|Accent and buttons|Акцент і кнопки
+appearance_background|Основной фон|Main background|Основне тло
+appearance_sidebar|Боковая панель|Sidebar|Бічна панель
+appearance_surface|Карточки и окна|Cards and dialogs|Картки та вікна
+appearance_text|Основной текст|Primary text|Основний текст
+appearance_muted|Вторичный текст|Secondary text|Другорядний текст
+appearance_reset|Сбросить цвета этой темы|Reset this theme's colors|Скинути кольори цієї теми
+appearance_preview|Изменения видны сразу. Сохраните их кнопкой «Сохранить»; закрытие окна отменяет просмотр.|Changes preview immediately. Save to keep them; closing cancels the preview.|Зміни видно одразу. Збережіть їх кнопкою «Зберегти»; закриття скасовує попередній перегляд.
+quality_navigation|Панель папок|Folder panel|Панель папок
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}
+
+{
+ const rows=`
+export_directory|Папка для файла передачи|Transfer file folder|Папка для файлу передачі
+export_directory_default|Обычная папка загрузок|Usual download folder|Звичайна папка завантажень
+export_directory_hint|Выберите папку для файла .xanty с выбранными профилями. Пустое поле — обычное скачивание. Последний путь запоминается.|Choose where to save the .xanty file with selected profiles. Leave empty for a normal download. The last folder is remembered.|Виберіть папку для файлу .xanty з вибраними профілями. Порожнє поле — звичайне завантаження. Останній шлях запам’ятовується.
+choose_folder|Выбрать папку|Choose folder|Вибрати папку
+export_directory_manual|В браузерной версии укажите полный путь вручную. В приложении доступен выбор папки Windows.|Enter the full path in browser mode. The desktop app provides the Windows folder picker.|У браузерній версії вкажіть повний шлях вручну. У застосунку доступний вибір папки Windows.
+export_saved_to|Файл передачи сохранён:|Transfer file saved to:|Файл передачі збережено:
+saving_export|Сохранение файла в выбранную папку|Saving to the selected folder|Збереження файлу у вибрану папку
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}

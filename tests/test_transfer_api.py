@@ -105,6 +105,68 @@ class TransferApiTests(unittest.IsolatedAsyncioTestCase):
         all_job = await self.finish((await response.json())['id'])
         self.assertEqual(all_job['total'], 3)
 
+    async def test_selected_and_all_profile_packages_save_in_the_chosen_folder_and_remember_it(self):
+        from xgenius.profile_archive import inspect_package
+        from xgenius.preferences import read_preferences
+        folder = self.root / 'Chosen transfer folder'
+        folder.mkdir()
+        for body, total in (({'usernames': ['alice']}, 1), ({'all': True}, 2)):
+            response = await self.client.post('/api/profiles/export', json={**body, 'export_directory': str(folder)})
+            self.assertEqual(response.status, 202, await response.text())
+            job = await self.finish((await response.json())['id'])
+            saved = Path(job['saved_path'])
+            self.assertEqual(saved.parent, folder.resolve())
+            self.assertEqual(saved.suffix, '.xanty')
+            self.assertTrue(saved.is_file())
+            self.assertEqual(inspect_package(saved)['total'], total)
+            self.assertEqual(read_preferences()['export_directory'], str(folder.resolve()))
+            response = await self.client.get('/api/profiles/download/' + job['id'])
+            self.assertEqual(await response.read(), saved.read_bytes())
+        self.assertEqual(len(list(folder.glob('*.xanty'))), 2)
+        self.assertEqual(list(folder.glob('*.tmp')), [])
+        self.assertIsNone(self.app._transfer_storage, 'Chosen-folder exports should not need a second temporary package')
+        await self.app.shutdown()
+        self.assertEqual(len(list(folder.glob('*.xanty'))), 2, 'Closing the app must retain the saved packages')
+
+    async def test_clearing_the_export_folder_restores_normal_downloads(self):
+        from xgenius.preferences import save_preferences, read_preferences
+        save_preferences({'export_directory': str(self.root)})
+        response = await self.client.post('/api/profiles/export', json={'all': True, 'export_directory': ''})
+        job = await self.finish((await response.json())['id'])
+        self.assertNotIn('saved_path', job)
+        self.assertTrue(job['download_ready'])
+        self.assertEqual(read_preferences()['export_directory'], '')
+
+    async def test_invalid_export_folders_are_rejected_before_starting(self):
+        for directory in ('relative/path', str(self.root / 'missing'), [], 'bad\0path'):
+            response = await self.client.post('/api/profiles/export', json={'all': True, 'export_directory': directory})
+            self.assertEqual(response.status, 400, await response.text())
+            self.assertEqual(self.app.jobs.snapshots(), [])
+
+    async def test_cancelled_chosen_folder_export_never_publishes_a_partial_package(self):
+        from xgenius.profile_archive import export_package
+        folder = self.root / 'Cancelled transfer'
+        folder.mkdir()
+        entered, release = threading.Event(), threading.Event()
+        def waiting_export(*args, **kwargs):
+            result = export_package(*args, **kwargs)
+            entered.set()
+            release.wait(10)
+            return result
+        with patch('xgenius.web.server.export_package', side_effect=waiting_export):
+            response = await self.client.post('/api/profiles/export', json={'all': True, 'export_directory': str(folder)})
+            job_id = (await response.json())['id']
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 5))
+                response = await self.client.post('/api/jobs/' + job_id + '/cancel', json={})
+                self.assertEqual(response.status, 200)
+            finally:
+                release.set()
+                await self.app.jobs.get(job_id).task
+        self.assertEqual(self.app.jobs.get(job_id).status, 'cancelled')
+        self.assertEqual(list(folder.iterdir()), [])
+        self.assertFalse(self.app.actions._transferring)
+
     async def test_open_profiles_and_cross_origin_requests_cannot_export(self):
         self.app.engine.account_manager.accounts['alice'] = SimpleNamespace(browser=object())
         response = await self.client.post('/api/profiles/export', json={'all': True})

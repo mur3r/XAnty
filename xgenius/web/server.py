@@ -26,6 +26,7 @@ from xgenius.settings import BROWSER_APP_MODE, OPEN_BROWSER, WEB_HOST, WEB_PORT
 from xgenius.web.actions import ActionError, Actions
 from xgenius.web.engine import Engine
 from xgenius.jobs import JobManager
+from xgenius.transfer_storage import export_directory, publish_export
 from xgenius.profile_archive import ArchiveError, export_package, import_package, inspect_package
 from xgenius.preferences import read_preferences, save_preferences
 from xgenius.updates import UpdateError, UpdateManager
@@ -314,22 +315,44 @@ class WebApp(WorkspaceApiMixin):
             if name in actions._busy or name in actions._closing or name in actions._transferring or name in actions._profile_operations or (state and state.browser):
                 raise ActionError('Close the selected profiles before exporting')
         selected = [a for a in accounts if a['username'] in names]
-        destination = self.transfer_directory() / f'XAnty-profiles-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}.xanty'
+        save_directory = export_directory(body.get('export_directory'))
+        remember_directory = 'export_directory' in body
+        filename = f'XAnty-profiles-{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}.xanty'
+        destination = (save_directory if save_directory else self.transfer_directory()) / filename
         folders = self.engine.folders.list() if body.get('all') else []
 
         async def worker(job):
             actions._transferring.update(names)
             job.update(phase='exporting', total=len(selected))
+            staged = None
             try:
+                if save_directory:
+                    def create_staging():
+                        with tempfile.NamedTemporaryFile(prefix='.xanty-export-', suffix='.tmp', dir=save_directory, delete=False) as stream:
+                            return Path(stream.name)
+                    staged = await asyncio.to_thread(create_staging)
+                output = staged if staged else destination
                 def export_locked():
                     with ExitStack() as leases:
                         for name in names:
                             leases.enter_context(ProfileLease.acquire(self.engine.config,name))
-                        return export_package(self.engine.config, selected, destination, job.update,job.cancelled,folders,privacy)
+                        return export_package(self.engine.config, selected, output, job.update,job.cancelled,folders,privacy)
                 result = await asyncio.to_thread(export_locked)
+                if staged:
+                    job.update(phase='saving_export')
+                    result['saved_path'] = await asyncio.to_thread(publish_export, staged, destination, job.cancelled)
+                    result['filename'] = filename
+                if remember_directory:
+                    try:
+                        save_preferences({'export_directory': str(save_directory) if save_directory else ''})
+                    except (OSError, ValueError):
+                        result['report'][0].setdefault('warnings', []).append('The package was saved, but the last folder could not be remembered.')
+                        job.update(report=result['report'])
                 job.file_path = destination
                 return result
             finally:
+                if staged:
+                    staged.unlink(missing_ok=True)
                 actions._transferring.difference_update(names)
 
         try:

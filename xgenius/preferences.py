@@ -1,6 +1,7 @@
 """UI preferences persist across launches even when the local server port changes."""
 import json
 import os
+import re
 import tempfile
 
 from xgenius.config import application_home
@@ -12,21 +13,36 @@ def valid_columns(value):
             and len(set(value)) == len(value) and 'name' in value)
 
 
+_COLOR_KEYS = {'accent', 'background', 'sidebar', 'surface', 'text', 'muted'}
+
+
+def valid_colors(value):
+    return (isinstance(value, dict) and not set(value) - {'dark', 'light'}
+            and all(isinstance(palette, dict) and not set(palette) - _COLOR_KEYS
+                    and all(isinstance(color, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', color)
+                            for color in palette.values()) for palette in value.values()))
+
+
 def read_preferences():
     result = {'language': 'ru', 'theme': 'dark', 'columns': list(DEFAULT_COLUMNS), 'trash_retention_days': 30,
-              'session_autosave': True, 'autosave_seconds': 60}
+              'session_autosave': True, 'autosave_seconds': 60, 'custom_colors': {}, 'folders_collapsed': False, 'export_directory': ''}
     try:
         data = json.loads((application_home() / 'preferences.json').read_text(encoding='utf-8'))
         if data.get('language') in ('ru', 'en', 'uk'):
             result['language'] = data['language']
         if data.get('theme') in ('dark', 'light'):
             result['theme'] = data['theme']
+        directory = data.get('export_directory')
+        if isinstance(directory, str) and len(directory) <= 4096 and not any(ord(char) < 32 for char in directory):
+            result['export_directory'] = directory
+        if valid_colors(data.get('custom_colors')):
+            result['custom_colors'] = data['custom_colors']
         if valid_columns(data.get('columns')):
             result['columns'] = data['columns']
         days = data.get('trash_retention_days')
         if type(days) is int and 0 <= days <= 3650:
             result['trash_retention_days'] = days
-        for key in ('session_autosave',):
+        for key in ('session_autosave', 'folders_collapsed'):
             if type(data.get(key)) is bool:
                 result[key] = data[key]
         if type(data.get('autosave_seconds')) is int and 30 <= data['autosave_seconds'] <= 3600:
@@ -38,7 +54,7 @@ def read_preferences():
 
 def save_preferences(data):
     if not isinstance(data, dict) or set(data) - {'language', 'theme', 'columns', 'trash_retention_days',
-                                               'session_autosave','autosave_seconds'}:
+                                               'session_autosave','autosave_seconds','custom_colors','folders_collapsed','export_directory'}:
         raise ValueError('Invalid interface preferences')
     result = read_preferences()
     if 'language' in data and data['language'] not in ('ru', 'en', 'uk'):
@@ -49,11 +65,15 @@ def save_preferences(data):
         raise ValueError('Invalid table columns')
     if 'trash_retention_days' in data:
         retention_days(data['trash_retention_days'])
-    for key in ('session_autosave',):
+    for key in ('session_autosave', 'folders_collapsed'):
         if key in data and type(data[key]) is not bool:
             raise ValueError('Invalid browser preference')
     if 'autosave_seconds' in data and (type(data['autosave_seconds']) is not int or not 30 <= data['autosave_seconds'] <= 3600):
         raise ValueError('Autosave interval must be 30 to 3600 seconds')
+    if 'custom_colors' in data and not valid_colors(data['custom_colors']):
+        raise ValueError('Choose six-digit HEX colors for dark or light themes')
+    if 'export_directory' in data and (not isinstance(data['export_directory'], str) or len(data['export_directory']) > 4096 or any(ord(char) < 32 for char in data['export_directory'])):
+        raise ValueError('Choose a valid export folder')
     result.update(data)
     root = application_home()
     root.mkdir(parents=True, exist_ok=True)
