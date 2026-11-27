@@ -368,7 +368,7 @@ def full_flow(page, label):
     expect(modal(page).locator('.column-item')).to_have_count(14)
     screenshot(page, label + '-columns')
     close_modal(page)
-    page.locator('[data-tool="browser_settings"]').click()
+    page.locator('.profile-management-toolbar [data-tool="browser_settings"]').click()
     expect(modal(page).locator('[name]')).to_have_count(2)
     screenshot(page, label + '-browser-settings')
     close_modal(page)
