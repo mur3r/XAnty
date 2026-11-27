@@ -40,11 +40,12 @@ class RotationServiceTests(unittest.TestCase):
         args, kwargs = session.get.call_args
         self.assertEqual(args, (URL,))
         self.assertFalse(kwargs['allow_redirects'])
-        self.assertEqual(kwargs['timeout'], (6, 20))
+        self.assertEqual(kwargs['timeout'], (6, 120))
 
     def test_provider_failures_and_timeouts_do_not_expose_the_url_or_retry(self):
         for status, body, error in ((429, {}, None), (403, {}, None), (302, {}, None),
                                     (200, {'success': False}, None),
+                                    (200, {'result': 'failure'}, None),
                                     (200, {'status': 'error', 'error': URL}, None),
                                     (200, {}, requests.exceptions.Timeout(URL)),
                                     (200, {}, requests.exceptions.ConnectionError(URL))):
@@ -101,7 +102,19 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result['requested'])
         self.assertFalse(result['changed'])
         request.assert_called_once()
-        self.assertEqual(check.call_count, 3)
+        self.assertEqual(check.call_count, 5)
+
+    async def test_mobile_reconnect_is_waited_for_without_repeating_the_rotation_request(self):
+        from xgenius.proxy_service import ProxyCheckError
+        with patch('xgenius.web.actions.request_rotation') as request, \
+                patch('xgenius.web.actions.check_proxy', side_effect=[ProxyCheckError('reconnecting'),
+                      ProxyCheckError('reconnecting'), ProxyCheckError('reconnecting'), '8.8.4.4']) as check, \
+                patch('xgenius.web.actions.asyncio.sleep', new=AsyncMock()) as sleep:
+            result = await self.actions.rotate_account_proxy('alice')
+        self.assertTrue(result['changed'])
+        self.assertEqual(check.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [3, 6, 10])
+        request.assert_called_once()
 
     async def test_an_unavailable_ip_is_reported_separately_from_an_accepted_rotation(self):
         from xgenius.proxy_service import ProxyCheckError
@@ -184,7 +197,8 @@ class RotationApiTests(unittest.IsolatedAsyncioTestCase):
         self.am.save_accounts(rows)
         with patch('xgenius.web.actions.request_rotation') as request, \
                 patch('xgenius.web.actions.check_proxy', return_value='8.8.4.4'), \
-                patch('xgenius.web.actions.lookup_proxy_location', return_value={'country_code': 'US'}):
+                patch('xgenius.web.actions.lookup_proxy_location', return_value={'country_code': 'US'}), \
+                patch('xgenius.web.actions.asyncio.sleep', new=AsyncMock()):
             response = await self.client.get('/api/accounts/alice/proxy/rotate')
             self.assertEqual(response.status, 405)
             request.assert_not_called()

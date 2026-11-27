@@ -82,7 +82,7 @@ class BrowserLaunchTests(unittest.TestCase):
         service_module.Service = lambda path: types.SimpleNamespace(process=types.SimpleNamespace(pid=123))
         selenium = types.ModuleType('selenium')
         selenium.webdriver = chrome_webdriver
-        self.proxy = types.SimpleNamespace(host='proxy.example',port=8080,server='http://proxy.example:8080', username=None, password=None)
+        self.proxy = types.SimpleNamespace(host='proxy.example',port=8080,server='http://proxy.example:8080', username=None, password=None,scheme='http')
         package = types.ModuleType('xgenius')
         package.__path__ = [str(ROOT)]
         modules = {'xgenius': package, 'selenium': selenium,
@@ -95,7 +95,7 @@ class BrowserLaunchTests(unittest.TestCase):
                    'xgenius.process_utils': types.SimpleNamespace(hard_close_browser=lambda b: self.closed.append(b)),
                    'xgenius.proxy_service': types.SimpleNamespace(
                        IP_CHECK_URL='https://check.example/ip', ProxyCheckError=ValueError,
-                       parse_proxy=lambda value: self.proxy, check_proxy=lambda value: '203.0.113.7',
+                       parse_proxy=lambda value: self.proxy, resolve_proxy=lambda value: value, check_proxy=lambda value: '203.0.113.7',
                        parse_ip_response=lambda value: value),
                    'xgenius.settings': types.SimpleNamespace(BLOCK_MEDIA_URLS=True)}
         from xgenius.browser_proxy import prepare_proxy_extension
@@ -117,6 +117,30 @@ class BrowserLaunchTests(unittest.TestCase):
         self.addCleanup(lambda: getattr(browser, '_xg_profile_lease', None) and browser._xg_profile_lease.release())
         self.addCleanup(lambda: getattr(browser, '_xg_proxy_extension', None) and browser._xg_proxy_extension.cleanup())
         return browser
+
+    def test_socks_launch_uses_an_authenticated_local_adapter_and_releases_it_on_failure(self):
+        self.proxy.scheme = 'socks5'
+        local = types.SimpleNamespace(host='127.0.0.1', port=19990, server='http://127.0.0.1:19990',
+                                      username='local-user', password='local-pass', scheme='http')
+        class Bridge:
+            def __init__(bridge, upstream):
+                self.assertIs(upstream, self.proxy)
+                bridge.proxy = local
+                bridge.closed = False
+                bridges.append(bridge)
+            def cleanup(bridge):
+                bridge.closed = True
+        bridges = []
+        with patch.dict(sys.modules, {'xgenius.socks_bridge': types.SimpleNamespace(SocksBridge=Bridge)}):
+            browser = asyncio.run(self.manager.create_browser(self.models.AccountCredentials('socks', '', proxy='proxy')))
+            self.assertIn('--proxy-server=http://127.0.0.1:19990', browser.options.arguments)
+            self.assertIs(browser._xg_proxy_bridge, bridges[0])
+            self.assertFalse(bridges[0].closed)
+            browser._xg_proxy_bridge.cleanup()
+            with patch.object(self.browser_module.webdriver, 'Chrome', side_effect=RuntimeError('driver failed')):
+                with self.assertRaises(self.settings.ProfileSettingsError):
+                    asyncio.run(self.manager.create_browser(self.models.AccountCredentials('socks_failure', '', proxy='proxy')))
+            self.assertTrue(bridges[-1].closed)
 
     def test_driver_start_failure_keeps_actionable_reason_and_redacts_secrets(self):
         credentials=self.models.AccountCredentials('alice','private-account-password',proxy='proxy')

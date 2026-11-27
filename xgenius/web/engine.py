@@ -195,7 +195,7 @@ class Engine:
             return ""
         try:
             proxy = parse_proxy(raw)
-            return proxy.server[7:]
+            return proxy.server.split('://', 1)[1]
         except ProxyCheckError:
             return "Invalid proxy"
 

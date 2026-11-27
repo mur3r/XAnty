@@ -48,7 +48,7 @@ def prepare_proxy_extension(proxy: HttpProxy):
             "name": "XAnty Proxy",
             "version": "1.1.0",
             "permissions": ["webRequest", "webRequestAuthProvider"],
-            "host_permissions": ["<all_urls>"] if proxy.username else ["https://api.ipify.org/*","https://checkip.amazonaws.com/*"],
+            "host_permissions": ["<all_urls>"] if proxy.username else ["https://api.ipify.org/*","https://api64.ipify.org/*","https://checkip.amazonaws.com/*"],
             "background": {"service_worker": "background.js"},
         }
         credentials = {"username": proxy.username, "password": proxy.password} if proxy.username else None

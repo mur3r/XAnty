@@ -272,6 +272,10 @@ class Actions:
                 await asyncio.shield(checking)
             if not unchanged():
                 raise ActionError('Proxy settings changed during rotation. Check the current IP.')
+            if not state.proxy_ip:
+                await self.check_account_proxy(username)
+            if not unchanged():
+                raise ActionError('Proxy settings changed during rotation. Check the current IP.')
             previous_ip = state.proxy_ip
             state.proxy_status = ''
             state.proxy_ip = ''
@@ -283,9 +287,9 @@ class Actions:
             if not unchanged():
                 raise ActionError('Proxy settings changed during rotation. Check the current IP.')
             result = {}
-            for attempt in range(3):
-                if attempt:
-                    await asyncio.sleep(2)
+            for delay in (0, 3, 6, 10, 15):
+                if delay:
+                    await asyncio.sleep(delay)
                 if not unchanged():
                     raise ActionError('Proxy settings changed during rotation. Check the current IP.')
                 result = await self.check_account_proxy(username)

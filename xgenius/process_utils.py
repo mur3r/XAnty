@@ -93,6 +93,9 @@ def hard_close_browser(browser, timeout: float = 15.0) -> None:
         except Exception:
             pass
 
+    bridge = getattr(browser, '_xg_proxy_bridge', None)
+    if bridge is not None:
+        bridge.cleanup()
     extension = getattr(browser, "_xg_proxy_extension", None)
     # Chrome may outlive a crashed driver. The stored Process also checks its
     # creation time, so a recycled PID cannot point cleanup at another program.
