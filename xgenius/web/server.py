@@ -443,8 +443,18 @@ class WebApp(WorkspaceApiMixin):
         self._require_engine().edit_account(request.match_info["username"], await request.json())
         return self._json({"ok": True})
 
+    async def api_user_agent(self, request):
+        from xgenius.user_agent import browser_identity
+        actions = self._require_engine()
+        return self._json(await actions._run_profile_worker(browser_identity, actions.e.config))
+
+    async def api_user_agent(self, request):
+        from xgenius.user_agent import browser_identity
+        actions = self._require_engine()
+        return self._json(await actions._run_profile_worker(browser_identity, actions.e.config))
+
     async def api_profile_tool(self,request):
-        if request.method == 'GET' and request.match_info['tool'] != 'cookies':
+        if request.method == 'GET' and request.match_info['tool'] not in ('cookies', 'user_agent'):
             raise web.HTTPMethodNotAllowed(request.method,['POST'])
         body = await request.json() if request.method == 'POST' and request.can_read_body else {}
         result = await self._require_engine().profile_tool(request.match_info['username'],request.match_info['tool'],body)
@@ -639,6 +649,7 @@ class WebApp(WorkspaceApiMixin):
             web.get("/", self.index),
             web.get("/ws", self.ws_handler),
             web.get("/api/state", self.api_state),
+            web.get("/api/browser/user-agent", self.api_user_agent),
             web.get("/api/preferences", self.api_preferences),
             web.put("/api/preferences", self.api_preferences),
             web.get('/api/updates', self.api_updates),
@@ -702,6 +713,7 @@ class WebApp(WorkspaceApiMixin):
             web.get("/api/accounts/{username}/cookies", self.api_cookies_export),
             web.post("/api/accounts/{username}/cookies", self.api_cookies_import),
             web.get("/api/accounts/{username}", self.api_accounts_get),
+            web.get("/api/browser/user-agent", self.api_user_agent),
             web.put("/api/accounts/{username}", self.api_accounts_edit),
             web.post("/api/actions/{name}", self.api_action),
             web.static("/static", STATIC_DIR),

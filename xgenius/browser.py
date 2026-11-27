@@ -89,6 +89,8 @@ class BrowserManager:
     async def _create_browser(self, credentials: AccountCredentials) -> webdriver.Chrome:
         # Fail before starting Chrome, including automatic recovery paths.
         workspace = workspace_settings(vars(credentials))
+        from xgenius.user_agent import apply_native_stealth, user_agent_settings
+        user_agent_settings(vars(credentials), self.config)
         proxy = parse_proxy(credentials.proxy)
         loop = asyncio.get_event_loop()
         extension_dir = None
@@ -227,8 +229,8 @@ class BrowserManager:
             except Exception:
                 native = {}
             if native.get('webglVendor') and native.get('renderer'):
-                await loop.run_in_executor(None, lambda: stealth(
-                    browser, user_agent=native['ua'],
+                await loop.run_in_executor(None, lambda: apply_native_stealth(
+                    browser, stealth, user_agent=native['ua'],
                     languages=native.get('languages') or ['en-US', 'en'],
                     vendor=native.get('vendor') or 'Google Inc.',
                     platform=native.get('platform'),
