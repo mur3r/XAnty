@@ -28,6 +28,22 @@ rotation_rejected|Провайдер отклонил ротацию. Прове
 rotation_timeout|Время ожидания ротации истекло. Запрос мог дойти до провайдера; проверьте IP перед повторной ротацией.|Rotation timed out. The request may have reached the provider; check the IP before trying again.|Час очікування ротації минув. Запит міг дійти до провайдера; перевірте IP перед повторною ротацією.
 rotation_unreachable|Не удалось отправить запрос на ротацию. Проверьте ссылку и подключение.|Cannot send the rotation request. Check the link and connection.|Не вдалося надіслати запит на ротацію. Перевірте посилання та з’єднання.
 rotation_http|Провайдер ротации вернул HTTP {code}. Проверьте ссылку и ограничения смены IP.|Rotation provider returned HTTP {code}. Check the link and limits.|Провайдер ротації повернув HTTP {code}. Перевірте посилання та обмеження зміни IP.
+ua_title|User-Agent профиля|Profile User-Agent|User-Agent профілю
+ua_mode|Режим User-Agent|User-Agent mode|Режим User-Agent
+ua_auto|Автоматически по версии Chromium|Automatic for the Chromium version|Автоматично за версією Chromium
+ua_manual|Вручную с проверкой совместимости|Manual with compatibility validation|Вручну з перевіркою сумісності
+ua_generate|Сгенерировать по выбранному ядру|Generate for the selected browser|Згенерувати для вибраного ядра
+ua_copy|Скопировать User-Agent|Copy User-Agent|Скопіювати User-Agent
+ua_copied|User-Agent скопирован|User-Agent copied|User-Agent скопійовано
+ua_loading|Определяем версию Chromium…|Reading the Chromium version…|Визначаємо версію Chromium…
+ua_next|При следующем запуске: Chromium {version}|Next launch: Chromium {version}|Під час наступного запуску: Chromium {version}
+ua_live|Фактический User-Agent открытого профиля · Chromium {version}|Actual User-Agent of the open profile · Chromium {version}|Фактичний User-Agent відкритого профілю · Chromium {version}
+ua_compatibility|User-Agent соответствует реальному Chromium и Windows. Для другой версии сначала выберите соответствующее ядро в «Инструментах». Одинаковые ядра могут иметь одинаковый UA. Изменения применяются при следующем запуске профиля.|The User-Agent matches the real Chromium and Windows. To use another version, select its browser in Tools first. Matching browsers can have identical UAs. Changes apply on the next profile launch.|User-Agent відповідає реальному Chromium та Windows. Для іншої версії спочатку виберіть відповідне ядро в «Інструментах». Однакові ядра можуть мати однаковий UA. Зміни застосовуються під час наступного запуску профілю.
+ua_unavailable|Не удалось определить User-Agent. Установите или выберите совместимый Chromium.|Cannot determine the User-Agent. Install or select a compatible Chromium.|Не вдалося визначити User-Agent. Встановіть або виберіть сумісний Chromium.
+ua_mismatch|User-Agent не совпадает с выбранным Chromium. Сгенерируйте его заново или выберите ядро соответствующей версии.|The User-Agent does not match the selected Chromium. Generate it again or select the matching browser version.|User-Agent не збігається з вибраним Chromium. Згенеруйте його заново або виберіть ядро відповідної версії.
+ua_format|Используйте стандартный User-Agent Windows Chromium, созданный генератором для выбранного ядра.|Use the standard Windows Chromium User-Agent generated for the selected browser.|Використовуйте стандартний User-Agent Windows Chromium, створений генератором для вибраного ядра.
+ua_copy_failed|Не удалось скопировать. Выделите User-Agent и нажмите Ctrl+C.|Could not copy. Select the User-Agent and press Ctrl+C.|Не вдалося скопіювати. Виділіть User-Agent і натисніть Ctrl+C.
+ua_live_failed|Не удалось прочитать User-Agent. Проверьте, что профиль ещё открыт.|Could not read the User-Agent. Check that the profile is still open.|Не вдалося прочитати User-Agent. Перевірте, що профіль ще відкритий.
 proxy_rotation_url|Ссылка ротации прокси|Proxy rotation URL|Посилання ротації проксі
 proxy_rotation_hint|Вставьте ссылку смены IP от провайдера прокси. Для ротации нажмите «Сменить IP» рядом с прокси.|Paste your provider's IP rotation link. Use Rotate IP next to the proxy to send the request.|Вставте посилання зміни IP від провайдера проксі. Для ротації натисніть «Змінити IP» біля проксі.
 proxy_ip_unreachable|Не удалось определить внешний IP через прокси. Проверьте адрес, порт и доступ к сети.|Cannot determine the external IP through the proxy. Check the address, port and network access.|Не вдалося визначити зовнішній IP через проксі. Перевірте адресу, порт і доступ до мережі.
@@ -455,6 +471,12 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
   }
   const errors = {'Profile is already open in another session. Close it before continuing.':'profile_already_open','Закройте выбранные профили и дождитесь завершения операций перед удалением в корзину.':'close_before_trash','Профиль с этим именем находится в корзине. Сначала восстановите или удалите его окончательно.':'reserved_in_trash','Another transfer operation is running': 'transfer_busy', 'Profile transfer is running; wait for it to finish': 'transfer_busy', 'Close the selected profiles before exporting': 'close_before_export', 'Enter a Dolphin API token': 'token_required', 'Invalid or expired Dolphin API token': 'invalid_token', 'Cannot connect to the Dolphin API': 'api_unavailable', 'No profiles to export': 'no_profiles_export', 'No saved cookies for this profile': 'cookies_missing', 'Close this profile before importing cookies': 'close_before_cookies', 'Operation cancelled': 'cancelled'};
   Object.assign(errors, {
+    'The Chromium version is unavailable. Install or select a compatible browser first.':'ua_unavailable',
+    'User-Agent generation requires Chromium 107 or newer.':'ua_unavailable',
+    'Use a standard Windows Chromium User-Agent generated for the selected browser.':'ua_format',
+    'User-Agent does not match the selected Chromium. Generate it again or select the matching browser version.':'ua_mismatch',
+    'Choose automatic or manual User-Agent mode.':'ua_format',
+    'Could not read the live User-Agent. Check that the profile is still open.':'ua_live_failed',
     'Enter an HTTP or HTTPS proxy rotation link.':'rotation_invalid',
     'Add a proxy rotation link in the profile settings first.':'rotation_missing',
     'This proxy rotation link is already in use. Wait for the current rotation to finish.':'rotation_busy',

@@ -39,6 +39,7 @@ class AccountCredentials:
     profile_id: str = ''
     profile_number: Optional[int] = None
     icon_text: str = ''
+    user_agent_mode: str = 'auto'
 
 
 @dataclass

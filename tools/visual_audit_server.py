@@ -97,7 +97,9 @@ async def api(request):
     body = await request.json() if request.can_read_body and request.content_type == 'application/json' else {}
     s.requests.append(dict(path=path, method=method, body=body))
     result = dict(ok=True)
-    if path == '/api/preferences':
+    if path == '/api/browser/user-agent' or path.endswith('/tools/user_agent'):
+        result = dict(available=True, user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36', browser_version='128.0.6613.137', source='generated', mode='auto', error='')
+    elif path == '/api/preferences':
         if method == 'PUT':
             s.preferences.update(body)
         result = s.preferences

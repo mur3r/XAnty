@@ -20,6 +20,7 @@ from xgenius.proxy_rotation import ProxyRotationError, request_rotation, rotatio
 from xgenius.error_messages import safe_launch_error
 from xgenius.profile_settings import ProfileSettingsError, browser_settings, workspace_settings
 from xgenius.preferences import read_preferences
+from xgenius.user_agent import browser_identity, profile_identity, user_agent_settings
 from xgenius.browser_workspace import browser_lock, save_workspace, parse_cookie_input, live_cookies, clear_cache, profile_directory
 from xgenius.profile_leases import ProfileLease
 from xgenius.portable_session import export_session, store_session
@@ -46,6 +47,7 @@ def _credentials(acc: dict) -> AccountCredentials:
         icon_text=acc.get('icon_text',''),
         proxy=acc.get("proxy"),
         user_agent=acc.get("user_agent"),
+        user_agent_mode=acc.get("user_agent_mode", "auto"),
         headless=acc.get("headless", False),
         group=acc.get("group", ""),
         auth_token=acc.get("auth_token"),
@@ -603,6 +605,21 @@ class Actions:
             raise ActionError('Browser is not open')
         self._profile_operations.add(username)
         try:
+            if operation == 'user_agent':
+                account = self._account(username)
+                if browser:
+                    from xgenius.browser_cdp import browser_connection
+                    def read_identity():
+                        with browser_lock(browser), browser_connection(browser) as connection:
+                            current = connection.call('Browser.getVersion')
+                        return {'available': True, 'user_agent': current['userAgent'],
+                                'browser_version': current['product'].split('/', 1)[-1],
+                                'source': 'live', 'mode': account.get('user_agent_mode', 'auto'), 'error': ''}
+                    try:
+                        return await self._run_profile_worker(read_identity)
+                    except Exception:
+                        raise ActionError('Could not read the live User-Agent. Check that the profile is still open.') from None
+                return profile_identity(self._account(username), await self._run_profile_worker(browser_identity, self.e.config))
             if operation == 'cache':
                 return await self._run_profile_worker( clear_cache, self.e.config, username)
             if operation == 'cookies':
@@ -691,6 +708,7 @@ class Actions:
             raise ActionError("auto_login must be a boolean")
         try:
             settings = browser_settings(data)
+            settings.update(user_agent_settings(data, self.e.config))
             settings.update(workspace_settings({**data, 'username':username}))
             metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note', 'icon_text') if k in data})
         except ProfileSettingsError as exc:
@@ -960,6 +978,7 @@ class Actions:
             raise ActionError("Account not found")
         try:
             settings = browser_settings({**previous, **data})
+            settings.update(user_agent_settings({**previous, **data}, self.e.config))
             settings.update(workspace_settings({**previous,**data}))
             metadata = metadata_values({k: data[k] for k in ('profile_status', 'favorite', 'tags', 'important', 'reminder_at', 'reminder_note', 'icon_text') if k in data})
         except ProfileSettingsError as exc:

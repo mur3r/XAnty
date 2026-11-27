@@ -54,3 +54,5 @@
 .export-directory{display:flex;align-items:center;gap:8px;min-width:0}.export-directory input{flex:1;min-width:0;width:100%}.export-directory .btn{flex-shrink:0}@media(max-width:650px){.export-directory{align-items:stretch;flex-direction:column}}
 
 .export-saved-path{overflow-wrap:anywhere;word-break:break-word}
+
+.ua-buttons{display:flex;gap:8px;flex-wrap:wrap}.ua-editor textarea{overflow-wrap:anywhere}.ua-quick-copy{display:inline-flex;align-items:center;gap:4px;border:0;border-radius:4px;background:transparent;color:var(--color-primary);font-size:10px;padding:2px 5px;cursor:pointer;white-space:nowrap}.ua-quick-copy:hover{color:var(--color-text)}

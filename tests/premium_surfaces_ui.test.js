@@ -16,12 +16,12 @@ function environment(){
  }
  return {c,document,elements,run:code=>vm.runInContext(code,c)};
 }
-const fields=['profile_name','username','group','profile_status','tags','favorite','notes','important','reminder_at','reminder_note','proxy','proxy_rotation_url','password','auth_token','ct0_token','auto_login','restore_tabs','extension_set','icon_text','block_images','block_media','block_fonts','phishing_protection','browser_language','browser_timezone','window_width','window_height'];
+const fields=['user_agent_mode','user_agent','profile_name','username','group','profile_status','tags','favorite','notes','important','reminder_at','reminder_note','proxy','proxy_rotation_url','password','auth_token','ct0_token','auto_login','restore_tabs','extension_set','icon_text','block_images','block_media','block_fonts','phishing_protection','browser_language','browser_timezone','window_width','window_height'];
 
-test('the grouped editor retains all 27 unique controls, constraints and safe defaults',()=>{
+test('the grouped editor retains all 29 unique controls, constraints and safe defaults',()=>{
  const e=environment(),html=e.run('Dialogs.accountFields()');
  const names=[...html.matchAll(/\bname="([^"]+)"/g)].map(m=>m[1]);
- assert.deepEqual([...names].sort(),[...fields].sort());assert.equal(new Set(names).size,27);
+ assert.deepEqual([...names].sort(),[...fields].sort());assert.equal(new Set(names).size,29);
  assert.match(html,/name="username"[^>]*required[^>]*pattern="\[A-Za-z0-9_\]\{1,32\}"/);
  assert.match(html,/name="proxy_rotation_url" type="url"[^>]*maxlength="8192"/);
  for(const name of ['restore_tabs','phishing_protection'])assert.match(html,new RegExp('name="'+name+'" checked'));
@@ -107,4 +107,26 @@ test('corrupt archive errors remain rejected and actionable in every interface l
   for(const key of ['package_checking','verifying_export','import_package_intro'])assert.notEqual(e.run(`t('${key}')`),key);
   assert.equal(e.run('I18N.error("Profile package upload is incomplete. Choose the original file and try again.")'),e.run('t("package_upload_incomplete")'));
  }
+});
+
+
+test('UA editor exposes auto/manual generation and escapes imported values',()=>{
+ const e=environment();e.c.profile={user_agent_mode:'manual',user_agent:'<script>private()</script>'};
+ const html=e.run('ProfileTools.userAgentFields(profile)');
+ assert.match(html,/name="user_agent_mode"/);assert.match(html,/data-ua-generate/);assert.match(html,/data-ua-copy/);
+ assert.doesNotMatch(html,/<script>/);assert.match(html,/&lt;script&gt;/);
+ assert.match(e.run('rowHTML({username:"qa",profile_name:"QA"})'),/data-act="copy_user_agent"/);
+ assert.equal(e.run('typeof ROW_ACTIONS.copy_user_agent'),'function');assert.equal(e.run('typeof ROW_ACTIONS.user_agent'),'function');
+});
+
+test('quick UA copy fetches the current profile value and never copies an unavailable identity',async()=>{
+ const e=environment(),copied=[],paths=[],messages=[];
+ e.c.navigator={clipboard:{writeText:async value=>copied.push(value)}};
+ e.c.testApi=async(method,path)=>{paths.push(path);return e.c.identity;};e.c.messages=messages;
+ e.run('api=testApi;toast=(...args)=>messages.push(args)');
+ e.c.identity={available:true,user_agent:'native Chromium UA',source:'live'};
+ await e.run('ProfileTools.copyUserAgent("qa name")');
+ assert.deepEqual(copied,['native Chromium UA']);assert.equal(paths[0],'/api/accounts/qa%20name/tools/user_agent');
+ e.c.identity={available:false,error:'The Chromium version is unavailable. Install or select a compatible browser first.'};
+ await e.run('ProfileTools.copyUserAgent("qa")');assert.equal(copied.length,1);assert.equal(messages.at(-1)[1],'error');
 });

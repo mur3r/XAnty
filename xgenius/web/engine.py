@@ -20,6 +20,7 @@ from xgenius.sysmon import CountingExecutor, SystemMonitor
 from xgenius.browser_workspace import save_workspace
 from xgenius.preferences import read_preferences
 from xgenius.workspace_operations import profile_size
+from xgenius.user_agent import browser_identity, profile_identity
 
 # Статусы, которые считаем "ошибкой" в сводке (всё, кроме служебных пауз/восстановления)
 _NON_ERROR_STATUS_PREFIXES = ("RECOVERING", "DM LIMIT", "SEND STALL")
@@ -129,9 +130,11 @@ class Engine:
         am = self.account_manager
         am.refresh_closed_browsers()
         rows = []
+        generated_ua = browser_identity(getattr(self, "config", None))
         for index, acc in enumerate(am.load_accounts(), 1):
             u = acc["username"]
             st = am.accounts.get(u)
+            identity = profile_identity(acc, generated_ua)
             rows.append({
                 "index": acc.get('profile_number', index),
                 "profile_id": acc.get('profile_id'),
@@ -172,6 +175,10 @@ class Engine:
                 "session_save_error": getattr(st,'session_save_error','') if st else '',
                 "browser_version": st.browser_version if st and st.browser else "",
                 "browser_user_agent": st.browser_user_agent if st and st.browser else "",
+                "user_agent": st.browser_user_agent if st and st.browser else identity["user_agent"],
+                "user_agent_source": "live" if st and st.browser else "generated",
+                "user_agent_error": "" if st and st.browser else identity["error"],
+                "user_agent_mode": acc.get("user_agent_mode", "auto"),
                 "login_status": ("needs_attention" if st and st.status_reason else
                                  "signed_in" if st and st.is_active else
                                  "manual" if st and st.browser and not is_auto_login_enabled(acc) else
