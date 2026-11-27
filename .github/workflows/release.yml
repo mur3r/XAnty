@@ -43,7 +43,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node tests/test_profile_ui.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          node --test tests/profile_management_ui.test.js tests/workspace_operations_ui.test.js tests/updates_ui.test.js tests/proxy_rotation_ui.test.js tests/profiles_screen_ui.test.js tests/premium_surfaces_ui.test.js tests/motion_ui.test.js tests/interface_quality_ui.test.js tests/desktop_shortcuts.test.js tests/profile_presentation_ui.test.js
+          node --test tests/profile_management_ui.test.js tests/workspace_operations_ui.test.js tests/updates_ui.test.js tests/proxy_rotation_ui.test.js tests/profiles_screen_ui.test.js tests/premium_surfaces_ui.test.js tests/motion_ui.test.js tests/interface_quality_ui.test.js tests/desktop_shortcuts.test.js tests/profile_presentation_ui.test.js tests/appearance_ui.test.js
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem xgenius/web/static/*.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE) { throw 'Invalid JavaScript' } }
           python -m compileall -q xgenius tools

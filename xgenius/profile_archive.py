@@ -281,10 +281,10 @@ def _read_manifest(archive: ZipFile, cancelled=None) -> tuple[dict, dict]:
     return manifest, _verify_integrity(archive, manifest['version'], cancelled)
 
 
-def inspect_package(path: Path) -> dict:
+def inspect_package(path: Path, cancelled=None) -> dict:
     try:
         with ZipFile(path) as archive:
-            manifest, integrity = _read_manifest(archive)
+            manifest, integrity = _read_manifest(archive, cancelled)
         return {'total': len(manifest['profiles']), 'created_at': manifest.get('created_at', ''),
                 'profiles': [{'username': p['account']['username'], 'group': p['account'].get('group', '')}
                              for p in manifest['profiles']], **integrity}

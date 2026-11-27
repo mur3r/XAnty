@@ -13,7 +13,7 @@ STATIC = Path(__file__).resolve().parents[1] / 'xgenius' / 'web' / 'static'
 
 class Fixture:
     def __init__(self, theme='dark', language='ru', updates=False, count=120, notes_pending=False):
-        self.preferences = dict(theme=theme, language=language, session_autosave=True, autosave_seconds=60)
+        self.preferences = dict(theme=theme, language=language, session_autosave=True, autosave_seconds=60, custom_colors={}, folders_collapsed=False, export_directory='')
         self.folders = ['Research', 'Команда Design', 'Довга назва папки для перевірки інтерфейсу', 'Empty QA']
         self.accounts = []
         self.requests = []
@@ -189,6 +189,10 @@ async def api(request):
         s.folders.append(body['name'])
     elif path in ('/api/profiles/export', '/api/dolphin/import-all'):
         result = s.jobs[0]
+        if path == '/api/profiles/export' and 'export_directory' in body:
+            s.preferences['export_directory'] = body['export_directory']
+            if body['export_directory']:
+                result['saved_path'] = body['export_directory'].rstrip('/') + '/synthetic-transfer.xanty'
     elif path == '/api/chromium/available':
         result = dict(channels=dict(Stable=dict(version='130.0.6723.58')), versions=[])
     return web.json_response(result)

@@ -40,6 +40,21 @@ class DesktopApi:
             window.show()
             self._hidden = False
 
+    def choose_folder(self, initial=''):
+        """Open the OS folder picker only in response to an interface action."""
+        with self._window_lock:
+            window = self._window
+            if window is None or self._closing.is_set():
+                return None
+        import webview
+        try:
+            directory = str(initial) if isinstance(initial, str) and len(initial) <= 4096 and Path(initial).is_dir() else ''
+        except (OSError, ValueError):
+            directory = ''
+        kind = webview.FileDialog.FOLDER if hasattr(webview, 'FileDialog') else webview.FOLDER_DIALOG
+        selected = window.create_file_dialog(kind, directory=directory, allow_multiple=False)
+        return str(selected[0]) if selected else None
+
     def close(self):
         """Exit through the native window's shutdown path."""
         with self._window_lock:

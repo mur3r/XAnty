@@ -74,3 +74,17 @@ summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 
   .profiles-view .profiles-table [data-column=name] { position: static; box-shadow: none; }
   .profiles-view .notes-cell.is-editing { min-width: 240px; max-width: 280px; }
 }
+
+/* Desktop panel state is independent of the temporary compact drawer. */
+.rail .mobile-sidebar-toggle { display: flex; }
+@media(min-width:651px) {
+ .shell.folders-collapsed { grid-template-columns:68px minmax(0,1fr); }
+ .folders-collapsed #workspace-sidebar { display:none; }
+}
+@media(min-width:651px) and (max-width:1200px) { .shell.folders-collapsed { grid-template-columns:60px minmax(0,1fr); } }
+@media(min-width:651px) and (max-width:950px) { .shell.folders-collapsed { grid-template-columns:52px minmax(0,1fr); } }
+@media(max-height:620px) { .rail { gap:4px; padding-top:12px; padding-bottom:12px; overflow-y:auto; } .rail .rail-brand { margin-bottom:8px; } .rail-button { min-height:32px; flex-shrink:0; height:34px; } }
+
+/* Status text never intercepts dialog controls underneath it; toast actions remain usable. */
+.toast { pointer-events:none; }
+.toast button,.toast a { pointer-events:auto; }

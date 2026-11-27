@@ -104,6 +104,8 @@ function transferEnvironment(){
   options=value;nodes.clear();
   const checkbox={checked:/name="settings_only"[^>]*\bchecked\b/.test(value.body)};
   nodes.set('[name=settings_only]',checkbox);
+  nodes.set('[name=export_directory]',{value:e.c.S.preferences.export_directory||'',focus(){}});
+  nodes.set('[data-pick-export-directory]',{});
   for(const selector of ['[data-export-selected]','[data-export-all]','[data-import-package]','[data-export-private]'])
    nodes.set(selector,{hidden:false,classList:{toggle(_,hidden){nodes.get(selector).hidden=hidden;}}});
   return {body:{},close(){}};
@@ -120,9 +122,9 @@ test('the transfer dialog defaults to complete sessions for both all and selecte
  assert.equal(e.nodes.get('[name=settings_only]').checked,false);
  assert.doesNotMatch(e.options().body,/notice warning hidden[^>]*data-export-private/);
  e.nodes.get('[data-export-all]').onclick();
- assert.deepEqual(JSON.parse(JSON.stringify(e.c.calls[0])),[[],true,false]);
+ assert.deepEqual(JSON.parse(JSON.stringify(e.c.calls[0])),[[],true,false,'']);
  e.nodes.get('[data-export-selected]').onclick();
- assert.deepEqual(JSON.parse(JSON.stringify(e.c.calls[1])),[['alice'],false,false]);
+ assert.deepEqual(JSON.parse(JSON.stringify(e.c.calls[1])),[['alice'],false,false,'']);
 });
 
 test('the row and bulk export dialog also defaults to complete transfer; a template is explicit',async()=>{
@@ -134,4 +136,30 @@ test('the row and bulk export dialog also defaults to complete transfer; a templ
  assert.equal(e.nodes.get('[data-export-private]').hidden,true);
  await e.options().buttons.at(-1).onClick({close(){}});
  assert.equal(e.c.calls[1][2],true);
+});
+
+
+test('both export entry points carry the chosen folder and the native chooser runs only on a click',async()=>{
+ const e=transferEnvironment();e.c.S.preferences.export_directory='C:/Previous';let calls=0;
+ e.c.window={pywebview:{api:{choose_folder:async initial=>{calls++;assert.equal(initial,'C:/Previous');return 'D:/Transfers';}}}};
+ e.run('Dialogs.transfer()');assert.equal(calls,0);
+ await e.nodes.get('[data-pick-export-directory]').onclick();assert.equal(calls,1);
+ e.nodes.get('[data-export-all]').onclick();assert.equal(e.c.calls.at(-1)[3],'D:/Transfers');
+ e.run('WorkspaceOps.exportDialog(["alice"])');e.nodes.get('[name=export_directory]').value='D:/Selected';
+ await e.options().buttons.at(-1).onClick({close(){}});assert.equal(e.c.calls.at(-1)[3],'D:/Selected');
+});
+
+test('explicit export destinations reach the API without changing profile selection',async()=>{
+ const {c,run}=environment();vm.runInContext(fs.readFileSync('xgenius/web/static/app.js','utf8').replace('const S = ','const AppState = '),c);
+ c.requests=[];run('api=async(method,path,body)=>{requests.push({method,path,body});return {id:"job"};};refreshJobs=async()=>{};S.autoDownloads=new Set();globalThis.Dialogs={showJob(){}};');
+ await run('startExport(["alice"],false,false,"D:/Transfers")');assert.equal(c.requests[0].body.export_directory,'D:/Transfers');
+});
+
+
+test('a package saved to the chosen folder is not downloaded a second time',async()=>{
+ const {c,run}=environment();vm.runInContext(fs.readFileSync('xgenius/web/static/app.js','utf8').replace('const S = ','const AppState = '),c);
+ c.downloads=[];
+ run('S.jobs=[];S.autoDownloads=new Set(["saved","normal"]);globalThis.Dialogs={updateJob:async()=>{}};WorkspaceOps.jobsUpdated=()=>{};renderJobs=()=>{};notifyJob=()=>{};refreshState=async()=>{};downloadURL=url=>downloads.push(url);api=async()=>({jobs:[{id:"saved",status:"completed",download_ready:true,saved_path:"D:/Transfers/file.xanty"},{id:"normal",status:"completed",download_ready:true}]});');
+ await run('refreshJobs()');assert.equal(c.downloads.length,1);assert.equal(c.downloads[0],'/api/profiles/download/normal');
+ assert.equal(run('S.autoDownloads.size'),0);
 });
