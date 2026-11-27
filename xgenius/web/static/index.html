@@ -17,7 +17,8 @@
     <button id="btn-sidebar-toggle" class="rail-button mobile-sidebar-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false" data-i18n-title="quality_navigation" data-i18n-aria-label="quality_navigation"><span data-ic="folder"></span></button><button class="rail-button active" data-tab="profiles" data-i18n-title="profiles"><span data-ic="layers"></span></button>
     <button class="rail-button" data-tab="transfers" data-i18n-title="transfers"><span data-ic="copy"></span><span id="job-indicator" class="rail-dot hidden"></span></button>
     <button class="rail-button" data-tab="workspace" data-i18n-title="workspace_operations"><span data-ic="sliders"></span></button>
-    <button class="rail-button" data-tab="load" data-i18n-title="load"><span data-ic="activity"></span></button><span class="spacer"></span>
+    <button class="rail-button" data-tab="load" data-i18n-title="load"><span data-ic="activity"></span></button>
+    <button class="rail-button" data-tab="logs" data-i18n-title="monitor" data-i18n-aria-label="monitor"><span data-ic="terminal"></span><span id="log-nav-badge" class="rail-count hidden" aria-hidden="true">0</span></button><span class="spacer"></span>
     <button class="rail-button" id="btn-help" data-i18n-title="help"><span data-ic="help-circle"></span></button>
     <button class="rail-button" id="btn-theme" data-i18n-title="theme"><span data-ic="sun"></span></button>
     <button class="rail-button exit-button" id="btn-exit" data-i18n-title="exit"><span data-ic="power"></span></button>
@@ -30,7 +31,7 @@
     <div class="sidebar-bottom"><div class="sidebar-caption" data-i18n="language"></div><select data-i18n-aria-label="language" data-language><option value="ru">Русский</option><option value="en">English</option><option value="uk">Українська</option></select><div class="local-badge"><i></i><span data-i18n="local"></span></div></div>
   </aside>
   <main class="main">
-    <header class="page-header"><div><div class="eyebrow" data-i18n="workspace"></div><h1 id="page-title"></h1><p id="page-subtitle"></p></div><div class="header-actions">
+    <header class="page-header"><div><h1 id="page-title"></h1></div><div class="header-actions">
       <button class="btn" data-tool="dolphin_import"><span data-ic="download"></span><span data-i18n="from_dolphin"></span></button><button class="btn" data-tool="transfer"><span data-ic="copy"></span><span data-i18n="transfer"></span></button><button class="btn primary" data-tool="add"><span data-ic="plus"></span><span data-i18n="new_profile"></span></button>
     </div></header>
     <div id="update-banner" class="update-banner hidden" role="status"></div>
@@ -48,7 +49,7 @@
     <section id="view-transfers" class="view hidden"><div class="section-intro"><p data-i18n="transfer_intro"></p><button class="btn primary" data-tool="package_import"><span data-ic="upload"></span><span data-i18n="import_package"></span></button></div><div id="jobs" class="jobs"></div></section>
     <section id="view-workspace" class="view hidden"><div id="workspace-panel" aria-live="polite"></div></section>
     <section id="view-load" class="view hidden"><p class="section-note" data-i18n="performance_text"></p><div id="metrics" class="metrics"></div><div class="metric-panel"><h3 data-i18n="cpu_history"></h3><svg id="load-chart" role="img" viewBox="0 0 800 170" preserveAspectRatio="none"></svg><div class="chart-legend"><span><i class="cpu-color"></i><span data-i18n="cpu"></span></span><span><i class="memory-color"></i><span data-i18n="memory"></span></span></div></div><div class="metric-panel"><div class="panel-heading"><h3 data-i18n="per_profile"></h3><a class="btn small" href="/api/sysmon/csv?kind=accounts" download>CSV</a></div><div id="load-accounts"></div></div></section>
-    <section id="logpanel" class="logpanel collapsed"><div class="log-head"><button id="log-toggle" class="text-button"><span data-ic="terminal"></span><span data-i18n="monitor"></span><span id="log-badge" class="badge">0</span></button><span class="spacer"></span><input id="log-filter" type="search" data-i18n-aria-label="log_search" data-i18n-placeholder="log_search"><button id="log-copy" class="icon-button" data-i18n-title="copy"><span data-ic="copy"></span></button><button id="log-clear" class="text-button" data-i18n="clear"></button></div><div id="logs" class="logs"></div></section>
+    <section id="view-logs" class="view logs-view hidden"><section id="logpanel" class="logpanel"><div class="log-head"><span id="log-badge" class="badge">0</span><input id="log-filter" type="search" data-i18n-aria-label="log_search" data-i18n-placeholder="log_search"><span class="spacer"></span><button id="log-copy" class="icon-button" data-i18n-title="copy" data-i18n-aria-label="copy"><span data-ic="copy"></span></button><button id="log-clear" class="text-button" data-i18n="clear"></button></div><div id="logs" class="logs" role="log" aria-live="off" tabindex="0" data-i18n-aria-label="monitor"></div></section></section>
     <footer class="app-footer"><span class="footer-dot"></span><span id="footer-version"></span><span class="footer-separator">·</span><span id="base-dir" class="path"></span><span class="spacer"></span><button class="text-button" data-update-open data-i18n="updates"></button><span class="footer-separator">·</span><button class="text-button" data-tool="stop_all" data-i18n="stop_all"></button></footer>
   </main>
 </div>

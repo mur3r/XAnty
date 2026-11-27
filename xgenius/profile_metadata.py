@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from xgenius.proxy_service import ProxyCheckError, parse_proxy
 from xgenius.profile_leases import ProfileLease
+from xgenius.profile_notes import note_text
 
 STATUSES = ('active', 'new', 'review', 'unused')
 COLUMNS = ('number', 'name', 'start', 'profile_status', 'status', 'proxy', 'auto_login',
@@ -91,6 +92,8 @@ def migrate(document):
     records = document['accounts'] + document['trash']
     number = max([document.get('next_number', 1)] + [a.get('profile_number', 0) + 1 for a in records])
     for account in records:
+        if 'notes' in account:
+            account['notes'] = note_text(account['notes'])
         account.setdefault('profile_id', uuid.uuid4().hex)
         if not account.get('profile_number'):
             account['profile_number'] = number
@@ -134,6 +137,8 @@ def replace_accounts(document, accounts):
         raise ValueError('A profile with this name already exists.')
     reserved = {name_key(a['username']) for a in document['trash']}
     for account in accounts:
+        if 'notes' in account:
+            account['notes'] = note_text(account['notes'])
         if name_key(account['username']) in reserved:
             raise ValueError('Профиль с этим именем находится в корзине. Сначала восстановите или удалите его окончательно.')
         previous = by_name.get(name_key(account['username']))

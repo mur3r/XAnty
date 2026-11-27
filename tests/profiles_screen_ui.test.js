@@ -92,3 +92,31 @@ test('runtime number formatting is reused for every row and remains localized',(
  const e=environment();e.run('for(let i=0;i<1000;i++)ProfileUI.runtimeHTML({runtime_seconds:3600});');assert.equal(e.formatterCount(),1);
  e.run('I18N.set("en");for(let i=0;i<250;i++)ProfileUI.runtimeHTML({runtime_seconds:1800});');assert.equal(e.formatterCount(),2);
 });
+
+test('notes show localized empty text and keep user text escaped',()=>{
+ const e=environment();
+ for(const language of ['ru','en','uk']){
+  e.run(`I18N.set(${JSON.stringify(language)})`);
+  const html=e.run('rowHTML({username:"alice",notes:"  "})');
+  assert.ok(html.includes(e.run('t("no_notes")')));assert.match(html,/data-note tabindex="0"/);
+ }
+ const html=e.run('rowHTML({username:"alice",notes:"<script>unsafe</script>\\nSecond line"})');
+ assert.doesNotMatch(html,/<script>/);assert.match(html,/&lt;script/);assert.match(html,/Second line/);
+});
+
+test('state refreshes do not replace the active inline note editor',()=>{
+ const e=environment(),rows=e.makeNode('#rows');rows.innerHTML='unsaved note draft';
+ e.run('S.noteEditing="alice";globalThis.ticks=0;ProfileUI.tick=()=>ticks++;renderTable();');
+ assert.equal(rows.innerHTML,'unsaved note draft');assert.equal(e.run('ticks'),1);
+});
+
+test('activity continues buffering outside its view with safe rendering and bounded history',()=>{
+ const e=environment();
+ for(const selector of ['#log-badge','#log-nav-badge','#logs'])e.makeNode(selector);
+ e.run('addLogs(["INFO hidden", "ERROR <script>unsafe</script>"]);');
+ assert.equal(e.nodes.get('#log-nav-badge').textContent,2);assert.equal(e.nodes.get('#logs').innerHTML,'');
+ e.run('S.tab="logs";renderLogs();');assert.match(e.nodes.get('#logs').innerHTML,/&lt;script/);
+ e.run('S.logFilter="ERROR";renderLogs();');assert.doesNotMatch(e.nodes.get('#logs').innerHTML,/INFO hidden/);
+ e.run('addLogs(Array.from({length:1600},(_,i)=>"line "+i));');assert.equal(e.run('S.logs.length'),1500);
+ e.run('S.logs=[];renderLogs();');assert.equal(e.nodes.get('#log-nav-badge').classList.contains('hidden'),true);
+});

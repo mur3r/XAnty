@@ -135,6 +135,8 @@ async def api(request):
         result.update(index=len(s.accounts) + 1, profile_id='qa-new', has_browser=False)
         s.accounts.append(result)
     elif path in ('/api/accounts/bulk_edit', '/api/accounts/metadata', '/api/accounts/move', '/api/accounts/auto_login'):
+        if body.get('metadata', {}).get('notes') == '[QA note error]':
+            return web.json_response(dict(error='Synthetic note save error'), status=400)
         for a in s.accounts:
             if a['username'] in body.get('usernames', []):
                 a.update(body.get('metadata', {}))
