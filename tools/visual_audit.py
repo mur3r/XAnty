@@ -244,6 +244,8 @@ def audit_notes_and_logs(page, label):
             note.press('Enter')
             note.locator('textarea').fill('')
             note.locator('textarea').press('Control+Enter')
+            expect(note.locator('textarea')).to_have_count(0)
+            expect(note).to_have_text(page.evaluate("t('no_notes')"))
     screenshot(page, label + '-empty-note')
     page.locator('.rail [data-tab="logs"]').click()
     expect(page.locator('#view-logs')).to_be_visible()
