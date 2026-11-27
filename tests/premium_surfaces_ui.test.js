@@ -61,3 +61,50 @@ test('monitoring retains two bounded history series, all metrics and CSV account
  const table=e.elements.get('#load-accounts').innerHTML;
  assert.equal((table.match(/<th>/g)||[]).length,5);assert.doesNotMatch(table,/<img/);assert.match(table,/&lt;img/);
 });
+
+function uploadEnvironment(){
+ const requests=[];
+ class Request {
+  constructor(){this.upload={};requests.push(this);}
+  open(method,path){this.method=method;this.path=path;}
+  send(body){this.body=body;}
+ }
+ class Fields {constructor(){this.values=[];}append(...args){this.values.push(args);}}
+ const c=vm.createContext({console,FormData:Fields,XMLHttpRequest:Request,S:{seenJobs:new Set()},
+  document:{documentElement:{},addEventListener(){},querySelectorAll:()=>[],dispatchEvent(){}},CustomEvent:class{}});
+ vm.runInContext(fs.readFileSync('xgenius/web/static/i18n.js','utf8'),c);
+ const source=fs.readFileSync('xgenius/web/static/dialogs.js','utf8').replace('return {open,confirm,','return {uploadPackage,open,confirm,');
+ vm.runInContext(source,c);
+ return {c,requests,run:code=>vm.runInContext(code,c)};
+}
+
+test('profile upload sends exact original size and switches to verification after transfer',async()=>{
+ const e=uploadEnvironment(),stages=[];e.c.file={size:1253959786};e.c.progress=(...values)=>stages.push(values);
+ const pending=e.run('Dialogs.uploadPackage(file,"rename",progress)'),xhr=e.requests[0];
+ assert.equal(xhr.method,'POST');assert.equal(xhr.path,'/api/profiles/import');
+ assert.equal(xhr.body.values[1][0],'file_size');assert.equal(xhr.body.values[1][1],'1253959786');
+ assert.equal(xhr.body.values[2][1],e.c.file);
+ xhr.upload.onprogress({lengthComputable:true,loaded:30,total:100});
+ xhr.upload.onprogress({lengthComputable:true,loaded:100,total:100});xhr.upload.onload();
+ assert.deepEqual(stages,[[30,false],[100,true],[100,true]]);
+ xhr.status=202;xhr.response={id:'new-job'};xhr.onload();
+ assert.equal((await pending).id,'new-job');assert.ok(e.c.S.seenJobs.has('new-job'));
+});
+
+test('corrupt archive errors remain rejected and actionable in every interface language',async()=>{
+ const e=uploadEnvironment();e.c.file={size:100};e.c.progress=()=>{};
+ const pending=e.run('Dialogs.uploadPackage(file,"rename",progress)'),xhr=e.requests[0];
+ xhr.status=400;xhr.response={error:'Profile package integrity check failed: corrupt ZIP data'};xhr.onload();
+ await assert.rejects(pending,/corrupt ZIP data/);assert.equal(e.c.S.seenJobs.size,0);
+ for(const lang of ['ru','en','uk']){
+  e.c.lang=lang;e.run('I18N.set(lang)');
+  for(const message of ['Profile package integrity check failed: corrupt ZIP data',
+   'Profile package integrity checksum mismatch. Export the profiles again.']){
+   e.c.message=message;const translated=e.run('I18N.error(message)');
+   assert.equal(translated,e.run('t("package_damaged")'));assert.ok(translated.includes('XAnty'));
+   assert.doesNotMatch(translated,/corrupt ZIP|checksum mismatch/);
+  }
+  for(const key of ['package_checking','verifying_export','import_package_intro'])assert.notEqual(e.run(`t('${key}')`),key);
+  assert.equal(e.run('I18N.error("Profile package upload is incomplete. Choose the original file and try again.")'),e.run('t("package_upload_incomplete")'));
+ }
+});

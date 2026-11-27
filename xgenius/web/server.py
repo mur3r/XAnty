@@ -23,6 +23,7 @@ from xgenius import __version__
 from xgenius.config import default_base_dir, get_paths_from_base, read_saved_base_dir, save_base_dir
 from xgenius.process_utils import force_kill_chromedrivers
 from xgenius.settings import BROWSER_APP_MODE, OPEN_BROWSER, WEB_HOST, WEB_PORT
+from xgenius.web.package_response import PackageFileResponse
 from xgenius.web.actions import ActionError, Actions
 from xgenius.web.engine import Engine
 from xgenius.jobs import JobManager
@@ -365,7 +366,7 @@ class WebApp(WorkspaceApiMixin):
         job = self._job(request)
         if job.status != 'completed' or not job.file_path or not job.file_path.is_file():
             raise ActionError('Profile package is not ready')
-        return web.FileResponse(job.file_path, headers={
+        return PackageFileResponse(job.file_path, headers={
             'Content-Type': 'application/octet-stream',
             'Content-Disposition': f'attachment; filename="{job.file_path.name}"',
             'Cache-Control': 'no-store',
@@ -377,11 +378,16 @@ class WebApp(WorkspaceApiMixin):
             raise ActionError('Another transfer operation is running')
         reader = await request.multipart()
         source = self.transfer_directory() / f'upload-{uuid.uuid4().hex}.xanty'
-        duplicates, received = 'rename', False
+        duplicates, received, expected_size, count = 'rename', False, None, 0
         try:
             async for part in reader:
                 if part.name == 'duplicates':
                     duplicates = await part.text()
+                elif part.name == 'file_size':
+                    value = await part.text()
+                    if not value.isascii() or not value.isdecimal() or len(value) > 12 or not 0 < int(value) <= 64 * 1024 ** 3:
+                        raise ActionError('Invalid profile package upload size')
+                    expected_size = int(value)
                 elif part.name == 'file' and not received:
                     received = True
                     count = 0
@@ -398,6 +404,8 @@ class WebApp(WorkspaceApiMixin):
                     await part.release()
             if not received:
                 raise ActionError('Choose an XAnty profile package')
+            if expected_size is not None and count != expected_size:
+                raise ActionError('Profile package upload is incomplete. Choose the original file and try again.')
             if duplicates not in ('rename', 'skip'):
                 raise ActionError('Choose rename or skip for existing profiles')
             preview = await asyncio.to_thread(inspect_package, source)

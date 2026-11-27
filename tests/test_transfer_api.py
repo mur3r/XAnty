@@ -90,6 +90,7 @@ class TransferApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(manifest['profiles']), 1)
         payload = FormData()
         payload.add_field('duplicates', 'rename')
+        payload.add_field('file_size', str(len(package)))
         payload.add_field('file', package, filename='profiles.xanty', content_type='application/octet-stream')
         response = await self.client.post('/api/profiles/import', data=payload)
         self.assertEqual(response.status, 202, await response.text())
@@ -344,6 +345,74 @@ class TransferApiTests(unittest.IsolatedAsyncioTestCase):
             release.set()
             response = await task
             await response.read()
+
+    async def test_multichunk_compressed_download_resume_and_upload_preserve_browser_bytes(self):
+        import random
+        data = random.Random(109).randbytes(3 * 1024 * 1024 + 117)
+        (self.config.get_profile_dir('alice') / 'state.bin').write_bytes(data)
+        response = await self.client.post('/api/profiles/export', json={'usernames': ['alice']})
+        job = await self.finish((await response.json())['id'])
+        url = '/api/profiles/download/' + job['id']
+        response = await self.client.get(url)
+        package = await response.read()
+        self.assertEqual(int(response.headers['Content-Length']), len(package))
+        self.assertEqual(package, self.app.jobs.get(job['id']).file_path.read_bytes())
+        split = 1024 * 1024 + 33
+        first = await self.client.get(url, headers={'Range': f'bytes=0-{split - 1}'})
+        second = await self.client.get(url, headers={'Range': f'bytes={split}-'})
+        self.assertEqual(first.status, 206)
+        self.assertEqual(second.status, 206)
+        self.assertEqual(await first.read() + await second.read(), package)
+        head = await self.client.head(url)
+        self.assertEqual(int(head.headers['Content-Length']), len(package))
+        self.assertEqual(await head.read(), b'')
+        unchanged = await self.client.get(url, headers={'If-None-Match': response.headers['ETag']})
+        self.assertEqual(unchanged.status, 304)
+        self.assertEqual(await unchanged.read(), b'')
+        payload = FormData()
+        payload.add_field('file_size', str(len(package)))
+        payload.add_field('file', package, filename='multichunk.xanty')
+        response = await self.client.post('/api/profiles/import', data=payload)
+        self.assertEqual(response.status, 202, await response.text())
+        imported = await self.finish((await response.json())['id'])
+        self.assertEqual(imported['imported'], 1)
+        self.assertEqual((self.config.get_profile_dir('alice_2') / 'state.bin').read_bytes(), data)
+
+    async def test_incomplete_or_invalid_upload_size_is_rejected_before_import_and_cleaned(self):
+        from xgenius.profile_archive import export_package
+        path = self.root / 'valid.xanty'
+        export_package(self.config, self.accounts, path)
+        package = path.read_bytes()
+        for size in (str(len(package) + 1), str(len(package) - 1), '0', '-1', 'no size',
+                     '1.5', '9' * 100, str(64 * 1024 ** 3 + 1)):
+            with self.subTest(size=size):
+                payload = FormData()
+                payload.add_field('file_size', size)
+                payload.add_field('file', package, filename='profiles.xanty')
+                response = await self.client.post('/api/profiles/import', data=payload)
+                self.assertEqual(response.status, 400, await response.text())
+                self.assertEqual(len(self.accounts), 2)
+                self.assertEqual(self.app.jobs.snapshots(), [])
+                self.assertEqual(list(self.app.transfer_directory().glob('upload-*')), [])
+
+    async def test_failed_export_verification_never_offers_a_download_and_releases_profiles(self):
+        from xgenius.profile_archive import ArchiveError
+        with patch('xgenius.profile_archive.inspect_package', side_effect=ArchiveError(
+                'Profile package integrity check failed: corrupt ZIP data')):
+            response = await self.client.post('/api/profiles/export', json={'all': True})
+            self.assertEqual(response.status, 202)
+            job_id = (await response.json())['id']
+            await self.app.jobs.get(job_id).task
+        job = await (await self.client.get('/api/jobs/' + job_id)).json()
+        self.assertEqual(job['status'], 'failed')
+        self.assertFalse(job['download_ready'])
+        self.assertIn('integrity', job['error'])
+        response = await self.client.get('/api/profiles/download/' + job_id)
+        self.assertEqual(response.status, 400)
+        self.assertFalse(self.app.actions._transferring)
+        self.assertEqual(list(self.app.transfer_directory().glob('*.xanty')), [])
+        response = await self.client.post('/api/profiles/export', json={'all': True})
+        self.assertEqual((await self.finish((await response.json())['id']))['exported'], 2)
 
     async def test_invalid_package_is_rejected_before_starting_an_import(self):
         payload = FormData()

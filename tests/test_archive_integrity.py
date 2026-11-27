@@ -214,6 +214,56 @@ class ArchiveIntegrityTests(unittest.TestCase):
             import_package(self.target, self.accounts, self.folders, self.path)
         self.assert_unchanged()
 
+    def test_export_reads_back_finished_zip_and_discards_damage_before_success(self):
+        (self.source.get_profile_dir('alice') / 'Preferences').write_bytes(b'browser-state' * 1000)
+        path = self.path
+
+        class DamagedWriter(ZipFile):
+            def close(writer):
+                finished = writer.mode == 'w' and writer.fp is not None
+                super().close()
+                if finished:
+                    with ZipFile(path) as archive:
+                        info = archive.getinfo('profiles/000000/browser/Preferences')
+                        offset = info.header_offset
+                    with path.open('r+b') as stream:
+                        stream.seek(offset + 26)
+                        name_size = int.from_bytes(stream.read(2), 'little')
+                        extra_size = int.from_bytes(stream.read(2), 'little')
+                        stream.seek(offset + 30 + name_size + extra_size)
+                        stream.write(b'\xff')  # An invalid DEFLATE block after ZIP close.
+
+        with patch('xgenius.profile_archive.ZipFile', DamagedWriter):
+            with self.assertRaisesRegex(ArchiveError, '(?i)integrity|corrupt'):
+                export_package(self.source, [{'username': 'alice'}], self.path)
+        self.assertFalse(self.path.exists())
+        self.assertEqual((self.source.get_profile_dir('alice') / 'Preferences').read_bytes(),
+                         b'browser-state' * 1000)
+
+    def test_export_verification_is_cancellable_and_never_leaves_a_download(self):
+        phases = []
+        def progress(**values):
+            if 'phase' in values:
+                phases.append(values['phase'])
+        with self.assertRaisesRegex(ArchiveError, 'Operation cancelled'):
+            export_package(self.source, [{'username': 'alice'}], self.path, progress=progress,
+                           cancelled=lambda: 'verifying_export' in phases)
+        self.assertFalse(self.path.exists())
+
+    def test_large_compressed_export_verifies_all_chunks_before_marking_report_verified(self):
+        import random
+        data = random.Random(73).randbytes(3 * 1024 * 1024 + 91)
+        (self.source.get_profile_dir('alice') / 'state.bin').write_bytes(data)
+        progress = []
+        result = export_package(self.source, [{'username': 'alice'}], self.path,
+                                progress=lambda **values: progress.append(copy.deepcopy(values)))
+        self.assertEqual(result['integrity'], 'verified')
+        self.assertTrue(any(value.get('phase') == 'verifying_export' for value in progress))
+        self.assertEqual(progress[0]['report'][0]['integrity'], 'pending')
+        self.assertEqual(progress[-1]['report'][0]['integrity'], 'verified')
+        with ZipFile(self.path) as archive:
+            self.assertEqual(archive.read('profiles/000000/browser/state.bin'), data)
+
     def test_malformed_checksum_descriptors_are_rejected_before_commit(self):
         members = self.members()
         valid_files = {name: hashlib.sha256(data).hexdigest() for name, data in members.items()}
