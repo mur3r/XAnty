@@ -86,7 +86,7 @@ const ProfileUI = (() => {
         event.preventDefault();event.stopPropagation();finish(event.key!=='Escape');
       }
     };
-    editor.onfocusout=event=>{if(!editor.contains(event.relatedTarget))finish(true);};
+    editor.addEventListener('focusout',event=>{if(!editor.contains(event.relatedTarget))finish(true);});
     input.focus();input.setSelectionRange(input.value.length,input.value.length);
   }
   async function preferences(values){S.preferences=await api('PUT','/api/preferences',values);}
