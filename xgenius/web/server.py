@@ -134,6 +134,9 @@ class WebApp(WorkspaceApiMixin):
     async def api_updates(self, request):
         return self._json(self.updates.snapshot())
 
+    async def api_release_history(self, request):
+        return self._json({'releases': self.updates.release_notes.history()})
+
     async def api_release_notes_seen(self, request):
         body = await request.json()
         self.updates.release_notes.acknowledge(body.get('version'))
@@ -608,6 +611,7 @@ class WebApp(WorkspaceApiMixin):
             web.get("/api/preferences", self.api_preferences),
             web.put("/api/preferences", self.api_preferences),
             web.get('/api/updates', self.api_updates),
+            web.get('/api/updates/history', self.api_release_history),
             web.post('/api/updates/notes/seen', self.api_release_notes_seen),
             web.post('/api/updates/notes/open', self.api_release_notes_open),
             web.post('/api/updates/check', self.api_update_check),

@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from aiohttp.test_utils import TestClient, TestServer
 
 from xgenius import __version__
-from xgenius.release_notes import ReleaseNotes, current_notes
+from xgenius.release_notes import ReleaseNotes, current_notes, archive_releases
 from xgenius.web.server import WebApp
 
 
@@ -29,6 +29,40 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertFalse(ReleaseNotes('example/XAnty').snapshot()['pending'])
         with patch('xgenius.release_notes.__version__', '2099.1.1.1'):
             self.assertTrue(ReleaseNotes('example/XAnty').snapshot()['pending'])
+
+    def test_published_history_is_ordered_and_cumulative_content_is_separated(self):
+        older = '## Earlier\n- Previous change'
+        latest = '## Latest\n- New change'
+        history = archive_releases([
+            {'tag_name': 'v2026.11.27.3', 'body': 'Installer instructions\n\n' + latest + '\n\n' + older},
+            {'tag_name': 'v2026.11.27.2', 'body': older},
+            {'tag_name': 'v2026.11.27.4', 'body': 'Draft', 'draft': True},
+            {'tag_name': 'v2026.11.27.5', 'body': 'Preview', 'prerelease': True},
+            {'tag_name': 'invalid', 'body': 'Ignore'},
+            {'tag_name': 'v2026.11.27.2', 'body': 'Duplicate'},
+        ])
+        self.assertEqual([entry['version'] for entry in history], ['2026.11.27.3', '2026.11.27.2'])
+        self.assertEqual([entry['notes'] for entry in history], [latest, older])
+
+    def test_offline_history_keeps_installed_notes_separate_and_does_not_acknowledge(self):
+        notes = ReleaseNotes('example/XAnty')
+        notes.notes = 'LATEST ONLY'
+        history = notes.history()
+        self.assertGreater(len(history), 1)
+        self.assertEqual(history[0]['version'], __version__)
+        self.assertEqual(history[0]['notes'], 'LATEST ONLY')
+        self.assertEqual(notes.snapshot()['notes'], 'LATEST ONLY')
+        self.assertNotIn('releases', notes.snapshot())
+        self.assertTrue(notes.snapshot()['pending'])
+        self.assertIn('2026.11.27.3', [entry['version'] for entry in history])
+
+    def test_invalid_or_missing_history_keeps_the_current_release_available(self):
+        notes = ReleaseNotes('')
+        for value in ('null', '{}', 'broken', '[null, 1, {"version":"wrong","notes":"Ignore"}]'):
+            with self.subTest(value=value), patch('xgenius.release_notes.Path.read_text', return_value=value):
+                self.assertEqual(len(notes.history()), 1)
+        with patch('xgenius.release_notes.Path.read_text', side_effect=FileNotFoundError):
+            self.assertEqual(notes.history()[0]['notes'], notes.notes)
 
     def test_bad_or_missing_acknowledgement_never_hides_notes(self):
         notes = ReleaseNotes('')
@@ -75,6 +109,18 @@ class ReleaseNotesApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((await response.json())['installed_release']['pending'])
         restarted = WebApp(asyncio.get_running_loop())
         self.assertFalse(restarted.updates.snapshot()['installed_release']['pending'])
+
+    async def test_history_is_explicit_and_never_replaces_or_acknowledges_latest_notes(self):
+        self.app.updates.release_notes.notes = 'LATEST ONLY'
+        response = await self.client.get('/api/updates/history')
+        self.assertEqual(response.status, 200)
+        history = (await response.json())['releases']
+        self.assertGreater(len(history), 1)
+        self.assertEqual(history[0]['notes'], 'LATEST ONLY')
+        response = await self.client.get('/api/updates')
+        installed = (await response.json())['installed_release']
+        self.assertEqual(installed['notes'], 'LATEST ONLY')
+        self.assertTrue(installed['pending'])
 
     async def test_open_maximizes_only_the_desktop_and_keeps_notes_pending(self):
         window = Mock()

@@ -1,6 +1,6 @@
 'use strict';
 const Updates=(()=>{
- let state=null,dialog=null,notesDialog=null,shownVersion='',polling=false,dismissed='',notified='';
+ let state=null,dialog=null,notesDialog=null,historyDialog=null,historyLoading=null,shownVersion='',polling=false,dismissed='',notified='';
  function notesHTML(notes){
   let html='',list='',paragraph=[];
   const flush=()=>{if(paragraph.length){html+=`<p>${esc(paragraph.join(' '))}</p>`;paragraph=[];}};
@@ -49,9 +49,19 @@ const Updates=(()=>{
  async function accept(data){state=data;render();showInstalled(true);if(data.release&&notified!==data.release.version){notified=data.release.version;toast(t('update_available',{version:data.release.version}),'info',12000,{label:t('update_details'),run:show});}}
  async function check(automatic=false){try{await accept(await api('POST','/api/updates/check',{automatic}));}catch(error){if(!automatic)toast(error.message,'error');}}
  async function show(){try{await accept(await api('GET','/api/updates'));if(dialog?.el.isConnected&&!dialog.closed){render();return;}dialog=Dialogs.open({title:'updates',icon:'download',wide:true,body:'<div data-update-body></div>',buttons:[{label:'close',onClick:d=>d.close()}]});render();}catch(error){toast(error.message,'error');}}
+ async function showHistory(){
+  if(historyDialog?.el.isConnected&&!historyDialog.closed)return;
+  if(historyLoading)return historyLoading;
+  historyLoading=(async()=>{try{
+   const data=await api('GET','/api/updates/history');
+   const body=`<p data-i18n="release_history_intro">${t('release_history_intro')}</p><div class="release-history">${(data.releases||[]).map((release,index)=>`<details class="release-history-item" data-history-version="${esc(release.version)}" ${index===0?'open':''}><summary><strong>XAnty ${esc(release.version)}</strong>${index===0?`<span class="tag" data-i18n="release_history_current">${t('release_history_current')}</span>`:''}${release.published_at?`<span class="muted">${esc(release.published_at.slice(0,10))}</span>`:''}</summary><article class="release-content">${notesHTML(release.notes)}</article></details>`).join('')}</div>`;
+   historyDialog=Dialogs.open({title:'release_history',icon:'activity',wide:true,body,buttons:[{label:'close',kind:'primary',onClick:d=>d.close()}]});
+  }catch(error){toast(error.message,'error');}finally{historyLoading=null;}})();
+  return historyLoading;
+ }
  async function act(){try{state=await api('POST',state.status==='ready'?'/api/updates/install':'/api/updates/download',{});render();}catch(error){toast(error.message,'error',12000);}}
  async function poll(){if(polling||state?.status!=='downloading')return;polling=true;try{await accept(await api('GET','/api/updates'));}catch{}finally{polling=false;}}
- function bind(){document.addEventListener('click',event=>{if(event.target.closest('[data-update-notes]'))showInstalled();if(event.target.closest('[data-update-open]'))show();if(event.target.closest('[data-update-dismiss]')){dismissed=state.release?.version||'';render();}const checkButton=event.target.closest('[data-update-check]');if(checkButton){checkButton.disabled=true;check().finally(render);}const action=event.target.closest('[data-update-action]');if(action){action.disabled=true;act();}});document.addEventListener('languagechange',()=>{render();renderInstalled();});}
+ function bind(){document.addEventListener('click',event=>{if(event.target.closest('[data-update-history]'))showHistory();if(event.target.closest('[data-update-notes]'))showInstalled();if(event.target.closest('[data-update-open]'))show();if(event.target.closest('[data-update-dismiss]')){dismissed=state.release?.version||'';render();}const checkButton=event.target.closest('[data-update-check]');if(checkButton){checkButton.disabled=true;check().finally(render);}const action=event.target.closest('[data-update-action]');if(action){action.disabled=true;act();}});document.addEventListener('languagechange',()=>{render();renderInstalled();});}
  document.addEventListener('DOMContentLoaded',async()=>{bind();try{await accept(await api('GET','/api/updates'));const result=state.install_result;if(result&&!result.ok)toast(t('update_previous_failed')+'\n'+result.error,'error',20000);await check(true);}catch{}setInterval(poll,1200);setInterval(()=>check(true),60*60*1000);});
- return {show};
+ return {show,history:showHistory};
 })();

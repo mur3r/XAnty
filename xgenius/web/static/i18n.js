@@ -656,3 +656,17 @@ quality_file_empty|Файл не выбран|No file selected|Файл не в�
 `;
  for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
 }
+
+{
+ const rows=`
+ops_safe_export|Только шаблон без данных профиля|Template only, without profile data|Лише шаблон без даних профілю
+ops_safe_export_hint|Оставьте выключенным для передачи названий, прокси, всех настроек и cookies. Шаблон исключает названия, папки, заметки, прокси, пароли, cookies и файлы браузера.|Leave off to transfer names, proxies, all settings and cookies. Template mode omits names, folders, notes, proxies, passwords, cookies and browser files.|Залиште вимкненим для передачі назв, проксі, усіх налаштувань і cookies. Шаблон виключає назви, папки, нотатки, проксі, паролі, cookies та файли браузера.
+ops_export_choice|Полный перенос включает названия, прокси, настройки, cookies, вкладки и данные каждого профиля.|A full transfer includes each profile's name, proxy, settings, cookies, tabs and browser data.|Повне перенесення містить назви, проксі, налаштування, cookies, вкладки та дані кожного профілю.
+browser_tools_settings|Настройки XAnty|XAnty settings|Налаштування XAnty
+release_history|История обновлений|Update history|Історія оновлень
+release_history_intro|Выберите версию, чтобы посмотреть изменения. История доступна без интернета.|Choose a version to read its changes. History is available offline.|Виберіть версію, щоб переглянути зміни. Історія доступна без інтернету.
+release_history_current|Установленная версия|Installed version|Встановлена версія
+release_notes_hint|Все предыдущие обновления доступны в «Настройки XAnty» → «История обновлений».|Find earlier updates in XAnty settings → Update history.|Попередні оновлення доступні в «Налаштування XAnty» → «Історія оновлень».
+`;
+ for(const line of rows.trim().split('\n')){const [key,...values]=line.split('|');I18N.messages[key]=values;}
+}
