@@ -120,3 +120,19 @@ test('activity continues buffering outside its view with safe rendering and boun
  e.run('addLogs(Array.from({length:1600},(_,i)=>"line "+i));');assert.equal(e.run('S.logs.length'),1500);
  e.run('S.logs=[];renderLogs();');assert.equal(e.nodes.get('#log-nav-badge').classList.contains('hidden'),true);
 });
+
+
+test('refreshes preserve keyboard focus on each stable profile control',()=>{
+ for(const selector of ['[data-note]','[data-rename]','[data-chk]','[data-profile-status]']){
+  const e=environment(),row={dataset:{u:'alice'}};
+  const original={dataset:{},tagName:'TD',closest:()=>row,matches:s=>s===selector};
+  const replacement={focus(options){this.focused=true;this.preventScroll=options.preventScroll;}};
+  row.querySelector=s=>s===selector?replacement:null;
+  e.c.document.activeElement=original;
+  e.c.document.querySelectorAll=s=>s==='#rows tr[data-u]'?[row]:[];
+  e.c.focusContext=e.run('ProfilesScreen.beforeRender()');
+  e.c.document.activeElement={};
+  e.run('ProfilesScreen.afterRender(focusContext)');
+  assert.equal(replacement.focused,true,selector);assert.equal(replacement.preventScroll,true);
+ }
+});

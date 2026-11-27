@@ -156,7 +156,7 @@ def audit_notes_and_logs(page, label):
     page.locator('[data-tool="columns"]').click()
     for field in modal(page).locator('.column-item').all():
         key = field.get_attribute('data-key')
-        if key == 'notes':
+        if key in ('notes', 'profile_status'):
             field.locator('input').check()
         elif key != 'name':
             field.locator('input').uncheck()
@@ -164,6 +164,11 @@ def audit_notes_and_logs(page, label):
     page.wait_for_function("!document.querySelector('.modal-overlay')")
     page.locator('#f-search').fill('qa_001')
     note = page.locator('#rows [data-note]')
+    for selector in ('[data-note]', '[data-rename]', '[data-chk]', '[data-profile-status]'):
+        control = page.locator('#rows ' + selector)
+        control.focus()
+        page.evaluate('refreshState()')
+        expect(control).to_be_focused()
     expect(note).to_have_text(page.evaluate("t('no_notes')"))
     note.dblclick()
     editor = note.locator('textarea')
@@ -177,6 +182,7 @@ def audit_notes_and_logs(page, label):
     expect(note.locator('textarea')).to_have_count(0)
     expect(note.locator('.note-preview')).to_have_text(draft)
     expect(note.locator('img')).to_have_count(0)
+    expect(note).to_be_focused()
     page.reload(wait_until='networkidle')
     page.locator('#f-search').fill('qa_001')
     expect(note.locator('.note-preview')).to_have_text(draft)
@@ -185,6 +191,14 @@ def audit_notes_and_logs(page, label):
     note.locator('textarea').fill('Cancelled draft')
     note.locator('textarea').press('Escape')
     expect(note.locator('.note-preview')).to_have_text(draft)
+    expect(note).to_be_focused()
+    note.press('Enter')
+    note.locator('textarea').fill('Cancelled from the save button')
+    note.locator('textarea').press('Tab')
+    expect(note.locator('[data-note-save]')).to_be_focused()
+    note.locator('[data-note-save]').press('Escape')
+    expect(note.locator('.note-preview')).to_have_text(draft)
+    expect(note).to_be_focused()
     note.dblclick()
     note.locator('textarea').fill('[QA note error]')
     note.locator('textarea').press('Control+Enter')
@@ -201,6 +215,37 @@ def audit_notes_and_logs(page, label):
     note.locator('textarea').fill('')
     note.locator('textarea').press('Control+Enter')
     expect(note).to_have_text(page.evaluate("t('no_notes')"))
+    for failed in (False, True):
+        note.focus()
+        note.press('Enter')
+        note.locator('textarea').fill('Delayed response draft')
+        page.evaluate("""failed=>{
+            window.__qaNoteApi=api;
+            api=(...args)=>args[1]==='/api/accounts/metadata'?new Promise((resolve,reject)=>{
+                window.__qaCompleteNote=()=>failed?reject(new Error('Delayed note error')):
+                    window.__qaNoteApi(...args).then(resolve,reject);
+            }):window.__qaNoteApi(...args);
+        }""", failed)
+        try:
+            note.locator('textarea').press('Control+Enter')
+            page.locator('#f-search').click()
+            page.evaluate('window.__qaCompleteNote()')
+            if failed:
+                expect(note.locator('.note-editor-error')).to_have_text('Delayed note error')
+                expect(note.locator('textarea')).to_have_value('Delayed response draft')
+            else:
+                expect(note.locator('textarea')).to_have_count(0)
+            expect(page.locator('#f-search')).to_be_focused()
+        finally:
+            page.evaluate('api=window.__qaNoteApi;delete window.__qaNoteApi;delete window.__qaCompleteNote')
+        if failed:
+            note.locator('[data-note-cancel]').click()
+        else:
+            note.press('Enter')
+            note.locator('textarea').fill('')
+            note.locator('textarea').press('Control+Enter')
+            expect(note.locator('textarea')).to_have_count(0)
+            expect(note).to_have_text(page.evaluate("t('no_notes')"))
     screenshot(page, label + '-empty-note')
     page.locator('.rail [data-tab="logs"]').click()
     expect(page.locator('#view-logs')).to_be_visible()
