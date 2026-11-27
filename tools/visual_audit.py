@@ -99,8 +99,20 @@ def audit_dimensions(page):
 def audit_editor(page, name, embed=False, nested=False):
     page.locator('.header-actions [data-tool="add"]').click()
     active = modal(page)
-    expect(active.locator('.account-form [name]')).to_have_count(27)
+    expect(active.locator('.account-form [name]')).to_have_count(29)
     active.locator('.account-form details.advanced summary').click()
+    ua = active.locator('[name="user_agent"]')
+    mode = active.locator('[name="user_agent_mode"]')
+    native_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+    expect(ua).to_have_value(native_ua)
+    assert ua.get_attribute('readonly') is not None
+    mode.select_option('manual')
+    assert ua.get_attribute('readonly') is None
+    ua.fill(native_ua.replace('Chrome/128.', 'Chrome/999.'))
+    active.locator('[data-ua-generate]').click()
+    expect(ua).to_have_value(native_ua)
+    expect(mode).to_have_value('auto')
+    assert ua.get_attribute('readonly') is not None
     active.locator('[name="window_height"]').fill('900')
     dimensions = active.locator('.modal-body').evaluate("""el=>({width:el.clientWidth,scroll:el.scrollWidth,
       top:el.getBoundingClientRect().top,bottom:el.getBoundingClientRect().bottom,viewport:innerHeight})""")
@@ -136,7 +148,7 @@ def audit_file_control(page):
     expect(control.locator('[data-file-name]')).to_have_text(page.evaluate("t('quality_file_empty')"))
     field = control.locator('input[type=file]')
     cookie_file = '.json' in (field.get_attribute('accept') or '')
-    filename = 'QA-довга-назва.json' if cookie_file else 'QA-довга-назва.xanty'
+    filename = 'QA-�����-�����.json' if cookie_file else 'QA-�����-�����.xanty'
     field.set_input_files(dict(name=filename, mimeType='application/json' if cookie_file else 'application/zip',
                               buffer=b'[]' if cookie_file else b'synthetic, not an imported archive'))
     expect(control.locator('[data-file-name]')).to_have_text(filename)
