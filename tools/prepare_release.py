@@ -8,6 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from xgenius import __version__
+from xgenius.release_notes import archive_releases
 from xgenius.updates import UpdateError, version_tuple
 
 
@@ -52,6 +53,21 @@ def prepare():
                 latest = repaired.json()['tag_name']
                 if latest != 'v' + intended:
                     raise UpdateError('The previous release tag could not be restored.')
+        published = []
+        page = 1
+        while True:
+            response = session.get(f'https://api.github.com/repos/{repository}/releases',
+                                   params={'per_page': 100, 'page': page}, timeout=(10, 30))
+            response.raise_for_status()
+            batch = response.json()
+            if not isinstance(batch, list):
+                raise RuntimeError('Cannot read published release history.')
+            published.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        (ROOT / 'xgenius/web/static/release-history.json').write_text(
+            json.dumps(archive_releases(published), ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
     version = next_version(__version__, latest)
     path = ROOT / 'xgenius/__init__.py'
     stamped, count = re.subn(r'^__version__ = "[^\"]+"', '__version__ = "' + version + '"', path.read_text(encoding='utf-8'), flags=re.M)

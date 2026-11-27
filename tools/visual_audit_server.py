@@ -12,7 +12,7 @@ STATIC = Path(__file__).resolve().parents[1] / 'xgenius' / 'web' / 'static'
 
 
 class Fixture:
-    def __init__(self, theme='dark', language='ru', updates=False, count=120):
+    def __init__(self, theme='dark', language='ru', updates=False, count=120, notes_pending=False):
         self.preferences = dict(theme=theme, language=language, session_autosave=True, autosave_seconds=60)
         self.folders = ['Research', 'Команда Design', 'Довга назва папки для перевірки інтерфейсу', 'Empty QA']
         self.accounts = []
@@ -62,7 +62,9 @@ class Fixture:
                             downloaded=0, can_install=True,
                             release=dict(version='2026.11.24.1', size=100, notes=notes,
                                          page_url='https://github.com/mur3r/XAnty/releases') if updates else None,
-                            installed_release=dict(version='2026.11.23.4', notes=notes, pending=False))
+                            installed_release=dict(version='2026.11.23.4', notes=notes + '\n- Current release only', pending=notes_pending))
+        self.release_history = [dict(self.updates['installed_release'], published_at=''),
+                                dict(version='2026.11.23.3', notes='## Earlier\n- Archived release only', published_at='2026-11-23T10:00:00Z')]
 
     def snapshot(self):
         return dict(phase='ready', version='2026.11.23.4', base_dir='QA · Synthetic workspace', folders=self.folders,
@@ -120,8 +122,12 @@ async def api(request):
             result['status'] = 'cancelled'
     elif path == '/api/sysmon':
         result = dict(latest=s.metric())
+    elif path == '/api/updates/history':
+        result = dict(releases=s.release_history)
     elif path.startswith('/api/updates'):
-        if path.endswith('/download'):
+        if path.endswith('/seen'):
+            s.updates['installed_release']['pending'] = False
+        elif path.endswith('/download'):
             s.updates.update(status='downloading', downloaded=10)
         elif path == '/api/updates' and s.updates['status'] == 'downloading':
             s.updates['downloaded'] = min(100, s.updates['downloaded'] + 20)
@@ -206,7 +212,8 @@ async def websocket(request):
 
 async def reset(request):
     request.app[STATE] = Fixture(request.query.get('theme', 'dark'), request.query.get('language', 'ru'),
-                                request.query.get('updates') == '1', min(5000, max(0, int(request.query.get('count', '120')))))
+                                request.query.get('updates') == '1', min(5000, max(0, int(request.query.get('count', '120')))),
+                                request.query.get('notes_pending') == '1')
     return web.json_response(dict(ok=True))
 
 

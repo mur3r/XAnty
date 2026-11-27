@@ -164,6 +164,65 @@ class TransferApiTests(unittest.IsolatedAsyncioTestCase):
             if scan is not None:
                 await scan
 
+    async def test_all_145_profiles_roundtrip_to_a_fresh_workspace_with_every_setting_and_cookie(self):
+        from xgenius.portable_session import session_path
+        self.accounts[:] = [dict(
+            username=f'dolphin_{index:03d}', profile_name=f'Робочий профіль {index:03d}',
+            dolphin_name=f'Dolphin source {index}', dolphin_profile_id=index + 1000,
+            group=f'Team {index % 3}', notes=f'Note {index}', tags=['work', f'tag{index}'],
+            proxy=f'http://user{index}:password{index}@proxy.example:{10000 + index}',
+            proxy_rotation_url=f'https://provider.example/rotate?key=synthetic-{index}',
+            password=f'password{index}', auth_token=f'auth{index}', ct0_token=f'csrf{index}',
+            user_agent=f'Synthetic User Agent {index}', auto_login=bool(index % 2),
+            browser_language='uk-UA', browser_timezone='Europe/Kyiv',
+            window_width=1280, window_height=800, restore_tabs=True, icon_text=str(index),
+            block_images=True, block_media=False, block_fonts=True, phishing_protection=True,
+            profile_status='active', favorite=bool(index % 2), important=False,
+            reminder_at='2027-01-01T12:00:00Z', reminder_note=f'Reminder {index}',
+            future_setting={'enabled': True, 'index': index}) for index in range(145)]
+        expected = copy.deepcopy(self.accounts)
+        expected_cookies = {}
+        for account in expected:
+            username = account['username']
+            cookies = [{'name': 'auth_token', 'value': 'session-' + username, 'domain': '.x.com'},
+                       {'name': 'other', 'value': 'other-' + username, 'domain': 'example.test'}]
+            store_session(self.config, username, cookies)
+            expected_cookies[username] = json.loads(session_path(self.config, username).read_text())['cookies']
+            profile = self.config.get_profile_dir(username)
+            (profile / 'Preferences').write_text(json.dumps({'synthetic': username}), encoding='utf-8')
+            tabs = session_path(self.config, username).parent / 'tabs.json'
+            tabs.write_text(json.dumps({'urls': ['https://example.test/' + username]}))
+        with patch('xgenius.profile_leases.psutil.process_iter', return_value=[]):
+            response = await self.client.post('/api/profiles/export', json={'all': True})
+            self.assertEqual(response.status, 202, await response.text())
+            exported = await self.finish((await response.json())['id'])
+            response = await self.client.get('/api/profiles/download/' + exported['id'])
+            package = await response.read()
+            with ZipFile(io.BytesIO(package)) as archive:
+                manifest = json.loads(archive.read('manifest.json'))
+                self.assertEqual([item['account'] for item in manifest['profiles']], expected)
+                self.assertTrue(all(manifest['privacy'].values()))
+            self.accounts.clear()
+            friend = Config(self.root / 'friend-workspace')
+            self.app.engine.config = friend
+            self.app.engine.folders = FolderStore(friend.base_dir / 'folders.json')
+            self.app.actions = Actions(self.app.engine)
+            payload = FormData()
+            payload.add_field('file', package, filename='full-transfer.xanty', content_type='application/octet-stream')
+            response = await self.client.post('/api/profiles/import', data=payload)
+            self.assertEqual(response.status, 202, await response.text())
+            imported = await self.finish((await response.json())['id'])
+        self.assertEqual(imported['imported'], 145)
+        self.assertEqual(self.accounts, expected)
+        for account in expected:
+            username = account['username']
+            restored = json.loads(session_path(friend, username).read_text())
+            self.assertTrue(restored['pending'])
+            self.assertEqual(restored['cookies'], expected_cookies[username])
+            self.assertEqual(json.loads((friend.get_profile_dir(username) / 'Preferences').read_text())['synthetic'], username)
+            tabs = session_path(friend, username).parent / 'tabs.json'
+            self.assertEqual(json.loads(tabs.read_text())['urls'], ['https://example.test/' + username])
+
     async def test_export_rejects_a_profile_leased_by_another_session_then_retries(self):
         with ProfileLease.acquire(self.config, 'alice', check_processes=False):
             response = await self.client.post('/api/profiles/export', json={'all': True})

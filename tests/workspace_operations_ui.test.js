@@ -93,3 +93,45 @@ test('all page scripts load with the workspace routes callable',()=>{
  for(const name of ['workspace','workspace_errors'])assert.equal(vm.runInContext(`typeof TOOL_ACTIONS.${name}`,c),'function');
  for(const name of ['load','editReminder','exportDialog','jobHTML'])assert.equal(vm.runInContext(`typeof WorkspaceOps.${name}`,c),'function');
 });
+
+
+function transferEnvironment(){
+ const e=environment(),nodes=new Map();let options;
+ e.c.$=selector=>nodes.get(selector);
+ e.c.selectedNames=()=>['alice'];e.c.rows=Array.from({length:145},(_,i)=>({username:'qa_'+i}));
+ e.c.calls=[];e.c.startExport=(...args)=>e.c.calls.push(args);
+ e.c.captureOpen=value=>{
+  options=value;nodes.clear();
+  const checkbox={checked:/name="settings_only"[^>]*\bchecked\b/.test(value.body)};
+  nodes.set('[name=settings_only]',checkbox);
+  for(const selector of ['[data-export-selected]','[data-export-all]','[data-import-package]','[data-export-private]'])
+   nodes.set(selector,{hidden:false,classList:{toggle(_,hidden){nodes.get(selector).hidden=hidden;}}});
+  return {body:{},close(){}};
+ };
+ const source=fs.readFileSync('xgenius/web/static/dialogs.js','utf8')
+  .replace('function open({','function originalOpen({')
+  .replace(' let jobDialog=null;',' function open(options){return captureOpen(options);} let jobDialog=null;');
+ vm.runInContext(source,e.c);
+ return {...e,nodes,options:()=>options};
+}
+
+test('the transfer dialog defaults to complete sessions for both all and selected profiles',()=>{
+ const e=transferEnvironment();e.run('Dialogs.transfer()');
+ assert.equal(e.nodes.get('[name=settings_only]').checked,false);
+ assert.doesNotMatch(e.options().body,/notice warning hidden[^>]*data-export-private/);
+ e.nodes.get('[data-export-all]').onclick();
+ assert.deepEqual(JSON.parse(JSON.stringify(e.c.calls[0])),[[],true,false]);
+ e.nodes.get('[data-export-selected]').onclick();
+ assert.deepEqual(JSON.parse(JSON.stringify(e.c.calls[1])),[['alice'],false,false]);
+});
+
+test('the row and bulk export dialog also defaults to complete transfer; a template is explicit',async()=>{
+ const e=transferEnvironment();e.run('WorkspaceOps.exportDialog(["alice"])');
+ const checkbox=e.nodes.get('[name=settings_only]');assert.equal(checkbox.checked,false);
+ await e.options().buttons.at(-1).onClick({close(){}});
+ assert.equal(e.c.calls[0][2],false);
+ checkbox.checked=true;checkbox.onchange({target:checkbox});
+ assert.equal(e.nodes.get('[data-export-private]').hidden,true);
+ await e.options().buttons.at(-1).onClick({close(){}});
+ assert.equal(e.c.calls[1][2],true);
+});
