@@ -1,5 +1,6 @@
 """Runtime browser sessions and state for the local web interface."""
 import asyncio
+from ipaddress import ip_address
 import threading
 import time
 from datetime import datetime
@@ -154,6 +155,7 @@ class Engine:
                 "import_warnings": acc.get("import_warnings", []),
                 "group": acc.get("group", "") or "",
                 "proxy": self.proxy_label(acc.get("proxy", "")),
+                "proxy_protocol": self.proxy_protocol(acc.get("proxy", "")),
                 "proxy_status": st.proxy_status if st else "",
                 "has_proxy_rotation": bool(acc.get('proxy_rotation_url')),
                 "proxy_rotating": getattr(st, 'proxy_rotating', False) if st else False,
@@ -194,7 +196,34 @@ class Engine:
                 "need_relogin": bool(st and st.need_relogin),
                 "has_browser": bool(st and st.browser),
             })
+        # Compare only successful, completed observations across the workspace,
+        # including profiles outside the current folder/page. Counts stay linear
+        # even when thousands of profiles share one gateway.
+        ip_groups = {}
+        for row in rows:
+            row['proxy_ip_shared_count'] = 0
+            if row['proxy_status'] != 'ok' or row['proxy_rotating'] or not row['proxy']:
+                continue
+            try:
+                address = ip_address(row['proxy_ip'])
+                key = str(getattr(address, 'ipv4_mapped', None) or address)
+            except (ValueError, TypeError):
+                continue
+            ip_groups.setdefault(key, []).append(row)
+        for group in ip_groups.values():
+            for row in group:
+                row['proxy_ip_shared_count'] = len(group) - 1
         return rows
+
+    @staticmethod
+    def proxy_protocol(raw: str) -> str:
+        if not raw:
+            return ''
+        try:
+            proxy = parse_proxy(raw)
+            return 'auto' if proxy.auto_detect else proxy.scheme
+        except ProxyCheckError:
+            return ''
 
     @staticmethod
     def proxy_label(raw: str) -> str:

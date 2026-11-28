@@ -1,6 +1,7 @@
-"""Keep upstream HTTP proxy authentication independent of Chrome's auth cache."""
+"""Keep HTTP/HTTPS proxy authentication independent of Chrome's auth cache."""
 import base64
 import socket
+import ssl
 
 from xgenius.socks_bridge import SocksBridge
 
@@ -22,7 +23,22 @@ class HttpBridge(SocksBridge):
 
     def connect(self, host, port):
         # Resolve/connect only the configured proxy, never the target origin.
-        return socket.create_connection((self.upstream.host, self.upstream.port), timeout=12)
+        connection = socket.create_connection((self.upstream.host, self.upstream.port), timeout=12)
+        if self.upstream.scheme != 'https':
+            return connection
+        try:
+            return ssl.create_default_context().wrap_socket(connection, server_hostname=self.upstream.host)
+        except ssl.SSLCertVerificationError:
+            self.last_error = 'HTTPS check failed through the proxy (certificate error).'
+            connection.close()
+            raise
+        except ssl.SSLError:
+            self.last_error = 'HTTPS proxy TLS handshake failed. Check protocol and port.'
+            connection.close()
+            raise
+        except BaseException:
+            connection.close()
+            raise
 
     def start_request(self, upstream, method, target, version, headers, upgrade, initial):
         outgoing = f'{method} {target} {version}'.encode('ascii')

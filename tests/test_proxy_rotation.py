@@ -78,7 +78,7 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
             started.set()
             finish.wait(3)
         with patch('xgenius.web.actions.request_rotation', side_effect=rotate) as request, \
-                patch('xgenius.web.actions.check_proxy', return_value='8.8.4.4'):
+                patch('xgenius.web.actions.check_proxy', side_effect=['8.8.8.8', '8.8.4.4']):
             first = asyncio.create_task(self.actions.rotate_account_proxy('alice'))
             await asyncio.to_thread(started.wait, 2)
             self.assertTrue(self.manager.accounts['alice'].proxy_rotating)
@@ -89,6 +89,7 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
         request.assert_called_once_with(URL)
         self.assertEqual(one, two)
         self.assertTrue(one['changed'])
+        self.assertEqual(one['previous_ip'], '8.8.8.8')
         self.assertEqual(self.manager.accounts['alice'].proxy_ip, '8.8.4.4')
         self.assertFalse(self.manager.accounts['alice'].proxy_rotating)
         self.assertFalse(self.actions._profile_operations)
@@ -102,17 +103,17 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result['requested'])
         self.assertFalse(result['changed'])
         request.assert_called_once()
-        self.assertEqual(check.call_count, 5)
+        self.assertEqual(check.call_count, 6)
 
     async def test_mobile_reconnect_is_waited_for_without_repeating_the_rotation_request(self):
         from xgenius.proxy_service import ProxyCheckError
         with patch('xgenius.web.actions.request_rotation') as request, \
-                patch('xgenius.web.actions.check_proxy', side_effect=[ProxyCheckError('reconnecting'),
+                patch('xgenius.web.actions.check_proxy', side_effect=['8.8.8.8', ProxyCheckError('reconnecting'),
                       ProxyCheckError('reconnecting'), ProxyCheckError('reconnecting'), '8.8.4.4']) as check, \
                 patch('xgenius.web.actions.asyncio.sleep', new=AsyncMock()) as sleep:
             result = await self.actions.rotate_account_proxy('alice')
         self.assertTrue(result['changed'])
-        self.assertEqual(check.call_count, 4)
+        self.assertEqual(check.call_count, 5)
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [3, 6, 10])
         request.assert_called_once()
 
@@ -132,10 +133,10 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
         def rotate(url):
             self.rows[0]['proxy'] = 'different.example:8080'
         with patch('xgenius.web.actions.request_rotation', side_effect=rotate), \
-                patch('xgenius.web.actions.check_proxy') as check:
+                patch('xgenius.web.actions.check_proxy', return_value='8.8.8.8') as check:
             with self.assertRaisesRegex(Exception, 'settings changed'):
                 await self.actions.rotate_account_proxy('alice')
-        check.assert_not_called()
+        check.assert_called_once()  # Only the fresh baseline preceded the edit.
         self.assertFalse(self.manager.accounts['alice'].proxy_rotating)
 
     async def test_other_profiles_cannot_rotate_the_same_link_concurrently(self):
@@ -147,7 +148,8 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
         request.assert_not_called()
 
     async def test_a_failed_request_clears_busy_state_and_the_cached_ip_without_retrying(self):
-        with patch('xgenius.web.actions.request_rotation', side_effect=ProxyRotationError('Provider unavailable')) as request:
+        with patch('xgenius.web.actions.request_rotation', side_effect=ProxyRotationError('Provider unavailable')) as request, \
+                patch('xgenius.web.actions.check_proxy', return_value='8.8.8.8'):
             result = await self.actions.rotate_account_proxy('alice')
         self.assertFalse(result['ok'])
         self.assertEqual(self.manager.accounts['alice'].proxy_ip, '')
@@ -155,6 +157,25 @@ class RotationActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.actions._profile_operations)
         self.assertFalse(self.actions._rotating_urls)
         request.assert_called_once()
+
+    async def test_stale_cached_ip_never_proves_that_rotation_changed_the_ip(self):
+        with patch('xgenius.web.actions.request_rotation') as request, \
+                patch('xgenius.web.actions.check_proxy', return_value='1.1.1.1'), \
+                patch('xgenius.web.actions.asyncio.sleep', new=AsyncMock()):
+            result = await self.actions.rotate_account_proxy('alice')
+        self.assertEqual(result['previous_ip'], '1.1.1.1')
+        self.assertEqual(result['ip'], '1.1.1.1')
+        self.assertFalse(result['changed'])
+        request.assert_called_once()
+
+    async def test_unavailable_baseline_reports_the_measured_ip_without_claiming_a_change(self):
+        from xgenius.proxy_service import ProxyCheckError
+        with patch('xgenius.web.actions.request_rotation'), \
+                patch('xgenius.web.actions.check_proxy', side_effect=[ProxyCheckError('Unavailable'), '8.8.4.4']):
+            result = await self.actions.rotate_account_proxy('alice')
+        self.assertEqual(result['previous_ip'], '')
+        self.assertEqual(result['ip'], '8.8.4.4')
+        self.assertIsNone(result['changed'])
 
 
 class RotationApiTests(unittest.IsolatedAsyncioTestCase):

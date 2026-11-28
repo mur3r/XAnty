@@ -4,6 +4,7 @@ import hmac
 import select
 import socket
 import socketserver
+import ssl
 import threading
 from secrets import token_urlsafe
 from urllib.parse import urlsplit, urlunsplit
@@ -88,7 +89,12 @@ class _Handler(socketserver.BaseRequestHandler):
             client.settimeout(None)
             upstream.settimeout(None)
             while not bridge.closed:
-                readable, _, _ = select.select([client, upstream], [], [], 1)
+                # A TLS proxy can have decrypted bytes buffered after its socket
+                # stops being readable. Drain those before waiting for new data.
+                buffered = [stream for stream in (client, upstream)
+                            if isinstance(stream, ssl.SSLSocket) and stream.pending()]
+                readable, _, _ = select.select([client, upstream], [], [], 0 if buffered else 1)
+                readable = list(dict.fromkeys(buffered + readable))
                 for source in readable:
                     block = source.recv(65536)
                     if not block:
