@@ -116,6 +116,7 @@ class BrowserLaunchTests(unittest.TestCase):
         self.created.append(browser)
         self.addCleanup(lambda: getattr(browser, '_xg_profile_lease', None) and browser._xg_profile_lease.release())
         self.addCleanup(lambda: getattr(browser, '_xg_proxy_extension', None) and browser._xg_proxy_extension.cleanup())
+        self.addCleanup(lambda: getattr(browser, '_xg_proxy_bridge', None) and browser._xg_proxy_bridge.cleanup())
         return browser
 
     def test_socks_launch_uses_an_authenticated_local_adapter_and_releases_it_on_failure(self):
@@ -149,6 +150,34 @@ class BrowserLaunchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'only supports Chrome version 128') as raised:
                 asyncio.run(self.manager.create_browser(credentials))
         self.assertNotIn('private-account-password',str(raised.exception))
+
+    def test_authenticated_http_uses_a_private_adapter_and_reports_real_upstream_rejection(self):
+        self.proxy.username, self.proxy.password = 'provider-user', 'provider-password'
+        local = types.SimpleNamespace(host='127.0.0.1', port=19991, server='http://127.0.0.1:19991',
+                                      username='local-user', password='local-password', scheme='http')
+        bridges = []
+        class Bridge:
+            last_error = None
+            def __init__(bridge, upstream):
+                self.assertIs(upstream, self.proxy)
+                bridge.proxy, bridge.closed = local, False
+                bridges.append(bridge)
+            def cleanup(bridge):
+                bridge.closed = True
+        with patch.dict(sys.modules, {'xgenius.http_bridge': types.SimpleNamespace(HttpBridge=Bridge)}):
+            browser = asyncio.run(self.manager.create_browser(self.models.AccountCredentials('http', '', proxy='proxy')))
+            self.assertIn('--proxy-server=http://127.0.0.1:19991', browser.options.arguments)
+            self.assertIs(browser._xg_proxy_bridge, bridges[0])
+            worker = (Path(browser._xg_proxy_extension.name) / 'background.js').read_text()
+            self.assertNotIn('provider-password', worker)
+            self.assertIn('local-password', worker)
+            def reject(browser, proxy):
+                bridges[-1].last_error = 'Proxy authentication failed (407). Check login and password.'
+                raise ValueError('Chrome could not connect through the proxy.')
+            with patch.object(self.browser_module, 'verify_browser_proxy', side_effect=reject):
+                with self.assertRaisesRegex(ValueError, 'Proxy authentication failed \\(407\\)'):
+                    asyncio.run(self.manager.create_browser(self.models.AccountCredentials('http_rejected', '', proxy='proxy')))
+            self.assertTrue(bridges[-1].closed)
 
     def test_real_chrome_version_native_ua_and_profile_preferences(self):
         credentials = self.models.AccountCredentials('alice', '', proxy='proxy',
