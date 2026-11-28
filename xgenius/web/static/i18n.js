@@ -719,6 +719,18 @@ release_notes_hint|Все предыдущие обновления доступ
 {
  const rows=`
 appearance_title|Цвета интерфейса|Interface colors|Кольори інтерфейсу
+appearance_mode|Режим оформления|Appearance mode|Режим оформлення
+appearance_presets|Готовые темы|Ready-made themes|Готові теми
+appearance_presets_hint|Выберите готовую палитру. У каждой есть светлый и тёмный варианты.|Choose a palette. Each includes a light and a dark version.|Виберіть палітру. Кожна має світлий і темний варіанти.
+appearance_preset_amethyst|Аметист|Amethyst|Аметист
+appearance_preset_ocean|Океан|Ocean|Океан
+appearance_preset_forest|Лес|Forest|Ліс
+appearance_preset_graphite|Графит|Graphite|Графіт
+appearance_preset_amber|Янтарь|Amber|Бурштин
+appearance_preset_rose|Роза|Rose|Троянда
+appearance_selected|Выбрана тема «{name}»|Selected theme: {name}|Вибрано тему «{name}»
+appearance_custom_selected|Свои цвета|Custom colors|Власні кольори
+appearance_customize|Настроить цвета вручную|Customize colors|Налаштувати кольори вручну
 appearance_dark|Тёмная тема|Dark theme|Темна тема
 appearance_light|Светлая тема|Light theme|Світла тема
 appearance_accent|Акцент и кнопки|Accent and buttons|Акцент і кнопки
