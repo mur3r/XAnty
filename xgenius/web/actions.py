@@ -274,11 +274,12 @@ class Actions:
                 await asyncio.shield(checking)
             if not unchanged():
                 raise ActionError('Proxy settings changed during rotation. Check the current IP.')
-            if not state.proxy_ip:
-                await self.check_account_proxy(username)
+            # A cached check can predate a provider's automatic IP change.
+            # Only a fresh observation is a valid before/after comparison.
+            baseline = await self.check_account_proxy(username)
             if not unchanged():
                 raise ActionError('Proxy settings changed during rotation. Check the current IP.')
-            previous_ip = state.proxy_ip
+            previous_ip = baseline.get('ip', '') if baseline.get('ok') else ''
             state.proxy_status = ''
             state.proxy_ip = ''
             state.proxy_error = ''
@@ -300,7 +301,7 @@ class Actions:
             if not unchanged():
                 raise ActionError('Proxy settings changed during rotation. Check the current IP.')
             self._log('Proxy rotation requested; external IP rechecked', username)
-            return {'ok': True, 'requested': True, 'ip': result.get('ip', ''),
+            return {'ok': True, 'requested': True, 'previous_ip': previous_ip, 'ip': result.get('ip', ''),
                     'changed': result.get('ip') != previous_ip if result.get('ok') and previous_ip else None,
                     'check_error': result.get('error', '')}
         except ProxyRotationError as exc:

@@ -26,6 +26,18 @@ class ProxyFormatTests(unittest.TestCase):
         self.assertEqual(parse_proxy("http://user:p%40ss@proxy.example:8080").password, "p@ss")
         self.assertEqual(parse_proxy("proxy.example:8080").requests_url, "http://proxy.example:8080")
 
+    def test_https_preserves_tls_scheme_credentials_ipv6_and_explicit_choice(self):
+        for value, expected in (
+                ('https://u:p%40ss@[::1]:8443', 'https://u:p%40ss@[::1]:8443'),
+                ('HTTPS://proxy.example:443', 'https://proxy.example:443')):
+            proxy = parse_proxy(value)
+            self.assertEqual(proxy.scheme, 'https')
+            self.assertEqual(proxy.requests_url, expected)
+            self.assertFalse(proxy.auto_detect)
+            with patch.object(module, '_socks5_port') as detect:
+                self.assertIs(module.resolve_proxy(proxy), proxy)
+            detect.assert_not_called()
+
     def test_missing_invalid_and_unsupported_proxy_fail_closed(self):
         for raw in ("", "not-a-proxy", "host:99999:user:pass", "socks4://host:1080", "host:80:user:",
                     "http://proxy.example,direct:8080", "http://http=proxy.example:8080"):

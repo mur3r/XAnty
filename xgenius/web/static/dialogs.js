@@ -17,7 +17,18 @@ const Dialogs=(()=>{
  const field=(key,name,value='',options={})=>`<label class="field">${label(key)}<input name="${name}" type="${options.type||'text'}" value="${esc(value??'')}" ${options.required?'required':''} ${options.attrs||''} ${options.placeholder?`placeholder="${esc(t(options.placeholder))}" data-i18n-placeholder="${options.placeholder}"`:''} autocomplete="off" spellcheck="false">${options.hint?`<small data-i18n="${options.hint}">${t(options.hint)}</small>`:''}</label>`;
  const check=(key,name,checked=false)=>`<label class="check"><input type="checkbox" name="${name}" ${checked?'checked':''}>${label(key)}</label>`;
  const fileControl=attrs=>`<span class="file-control"><input type="file" ${attrs}><span class="file-control-action" aria-hidden="true" data-i18n="quality_file_choose">${t('quality_file_choose')}</span><span class="file-control-name" aria-hidden="true" data-file-name data-i18n="quality_file_empty">${t('quality_file_empty')}</span></span>`;
- const formData=d=>{const result={};$$('input[name],textarea[name],select[name]',d.body).forEach(el=>{result[el.name]=el.type==='checkbox'?el.checked:el.value;});if(Object.prototype.hasOwnProperty.call(result,'reminder_at'))result.reminder_at=WorkspaceOps.toUTC(result.reminder_at);return result;};
+ const formData=d=>{
+  const result={};
+  $$('input[name],textarea[name],select[name]',d.body).forEach(el=>{result[el.name]=el.type==='checkbox'?el.checked:el.value;});
+  if(Object.prototype.hasOwnProperty.call(result,'proxy_protocol')){
+   const address=(result.proxy||'').trim();
+   // Auto preserves a pasted explicit URL; a selected protocol takes priority.
+   result.proxy=address&&result.proxy_protocol?result.proxy_protocol+'://'+address.replace(/^[a-z][a-z0-9+.-]*:\/\//i,''):address;
+   delete result.proxy_protocol;
+  }
+  if(Object.prototype.hasOwnProperty.call(result,'reminder_at'))result.reminder_at=WorkspaceOps.toUTC(result.reminder_at);
+  return result;
+ };
  function open({title,icon='layers',body,buttons=[],wide=false,fullscreen=false,onClose}){
   const previous=document.activeElement,overlay=document.createElement('div'),titleId=$('#dialog-title')?'dialog-title-'+(++dialogSequence):'dialog-title';overlay.className='modal-overlay';
   overlay.innerHTML=`<section class="modal premium-dialog ${wide?'wide':''}" data-dialog="${esc(title)}" role="dialog" aria-modal="true" aria-labelledby="${titleId}"><header class="modal-head"><span class="dialog-icon" aria-hidden="true">${I(icon,19)}</span><h2 id="${titleId}" data-i18n="${title}">${t(title)}</h2><button class="icon-button" data-close title="${t('close')}" data-i18n-title="close">${I('x',18)}</button></header><div class="modal-body">${body}<div class="inline-error hidden" role="alert" data-error></div></div><footer class="modal-foot"></footer></section>`;
@@ -38,10 +49,16 @@ const Dialogs=(()=>{
  function confirm(title,text,ok='done',kind='primary'){return new Promise(resolve=>{let answer=false;open({title,icon:kind==='danger'?'alert':'help-circle',body:`<p>${esc(text)}</p>`,onClose:()=>resolve(answer),buttons:[{label:'cancel',kind:'ghost',onClick:d=>d.close()},{label:ok,kind,onClick:d=>{answer=true;d.close();}}]});});}
  function confirmTyped(title,text){return new Promise(resolve=>{let answer=false;open({title,icon:'alert',body:`<p>${esc(text)}</p><div class="notice warning">${t('ops_protected_hint')}</div><form><label class="field"><span>${t('ops_type_delete')}</span><input name="confirmation" required pattern="DELETE" autocomplete="off" spellcheck="false"></label></form>`,onClose:()=>resolve(answer),buttons:[{label:'cancel',kind:'ghost',onClick:d=>d.close()},{label:'delete_forever',kind:'danger',onClick:d=>{if(!$('form',d.body).reportValidity())return;answer=true;d.close();}}]});});}
  const group=(key,icon,body)=>`<section class="settings-group"><h3>${I(icon,16)}<span data-i18n="${key}">${t(key)}</span></h3>${body}</section>`;
+ function proxyFields(a){
+  const match=/^(https?|socks5h?):\/\//i.exec(a.proxy||'');
+  const protocol=match?(match[1].toLowerCase()==='socks5h'?'socks5':match[1].toLowerCase()):'';
+  const options=[['','proxy_protocol_auto'],['http','HTTP'],['https','HTTPS'],['socks5','SOCKS5']].map(([value,key])=>`<option value="${value}" ${value===protocol?'selected':''}>${value?key:t(key)}</option>`).join('');
+  return `<div class="grid2"><label class="field">${label('proxy_protocol')}<select name="proxy_protocol">${options}</select></label>${field('proxy','proxy',a.proxy)}</div><div class="hint" data-i18n="proxy_hint">${t('proxy_hint')}</div>`;
+ }
  function accountFields(a={}){return `<form class="account-form">
   ${group('ui_identity','layers',`<div class="grid2">${field('name','profile_name',a.profile_name||a.dolphin_name||'')}${field('username','username',a.username,{required:true,attrs:'pattern="[A-Za-z0-9_]{1,32}" maxlength="32"',hint:'username_hint'})}</div>`)}
   ${group('ui_organization','folder',`<div class="grid2">${field('folder','group',a.group)}<label class="field">${label('profile_status')}<select name="profile_status">${ProfileUI.statusOptions(a.profile_status||'new')}</select></label></div>${field('tags','tags',Array.isArray(a.tags)?a.tags.map(tag=>typeof tag==='string'?tag:tag?.name||'').join(', '):a.tags||'',{hint:'tags_hint'})}${check('favorite','favorite',!!a.favorite)}<label class="field">${label('notes')}<textarea name="notes" rows="2">${esc(a.notes||'')}</textarea></label>${WorkspaceOps.profileFields(a)}`)}
-  ${group('ui_network','activity',`${field('proxy','proxy',a.proxy,{hint:'proxy_hint'})}${field('proxy_rotation_url','proxy_rotation_url',a.proxy_rotation_url,{type:'url',attrs:'maxlength="8192"',hint:'proxy_rotation_hint',placeholder:'https://provider.example/rotate?key=…'})}`)}
+  ${group('ui_network','activity',`${proxyFields(a)}${field('proxy_rotation_url','proxy_rotation_url',a.proxy_rotation_url,{type:'url',attrs:'maxlength="8192"',hint:'proxy_rotation_hint',placeholder:'https://provider.example/rotate?key=…'})}`)}
   ${group('ui_session','log-in',`${field('password_x','password',a.password,{type:'password'})}<div class="grid2">${field('auth_token','auth_token',a.auth_token)}${field('ct0_token','ct0_token',a.ct0_token)}</div>${check('auto_login','auto_login',!!a.auto_login)}`)}
   ${ProfileTools.userAgentFields(a)}
   ${ProfileTools.fields(a)}

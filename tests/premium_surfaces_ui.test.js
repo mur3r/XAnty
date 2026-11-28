@@ -16,12 +16,12 @@ function environment(){
  }
  return {c,document,elements,run:code=>vm.runInContext(code,c)};
 }
-const fields=['user_agent_mode','user_agent','profile_name','username','group','profile_status','tags','favorite','notes','important','reminder_at','reminder_note','proxy','proxy_rotation_url','password','auth_token','ct0_token','auto_login','restore_tabs','extension_set','icon_text','block_images','block_media','block_fonts','phishing_protection','browser_language','browser_timezone','window_width','window_height'];
+const fields=['user_agent_mode','user_agent','profile_name','username','group','profile_status','tags','favorite','notes','important','reminder_at','reminder_note','proxy','proxy_protocol','proxy_rotation_url','password','auth_token','ct0_token','auto_login','restore_tabs','extension_set','icon_text','block_images','block_media','block_fonts','phishing_protection','browser_language','browser_timezone','window_width','window_height'];
 
-test('the grouped editor retains all 29 unique controls, constraints and safe defaults',()=>{
+test('the grouped editor retains all 30 unique controls, constraints and safe defaults',()=>{
  const e=environment(),html=e.run('Dialogs.accountFields()');
  const names=[...html.matchAll(/\bname="([^"]+)"/g)].map(m=>m[1]);
- assert.deepEqual([...names].sort(),[...fields].sort());assert.equal(new Set(names).size,29);
+ assert.deepEqual([...names].sort(),[...fields].sort());assert.equal(new Set(names).size,30);
  assert.match(html,/name="username"[^>]*required[^>]*pattern="\[A-Za-z0-9_\]\{1,32\}"/);
  assert.match(html,/name="proxy_rotation_url" type="url"[^>]*maxlength="8192"/);
  for(const name of ['restore_tabs','phishing_protection'])assert.match(html,new RegExp('name="'+name+'" checked'));

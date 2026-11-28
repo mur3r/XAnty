@@ -1,4 +1,4 @@
-"""Validate HTTP/SOCKS5 proxies and check the public IP without a direct fallback."""
+"""Validate HTTP/HTTPS/SOCKS5 proxies and check IP without a direct fallback."""
 
 import ipaddress
 import re
@@ -55,7 +55,7 @@ def parse_proxy(value: str) -> HttpProxy:
     raw = f'{scheme}://{address}'
     try:
         parsed = urlsplit(raw)
-        if parsed.scheme not in ("http", "socks5", "socks5h"):
+        if parsed.scheme not in ("http", "https", "socks5", "socks5h"):
             raise ValueError("unsupported scheme")
         if parsed.path or parsed.query or parsed.fragment:
             raise ValueError("unexpected URL path")
@@ -69,9 +69,9 @@ def parse_proxy(value: str) -> HttpProxy:
         if any(c in host for c in ("/", "@", "\\", ",", ";", "=", "<", ">", "|")):
             raise ValueError("invalid host")
     except (ValueError, TypeError) as exc:
-        raise ProxyCheckError("Invalid proxy. Use host:port:user:password, http://user:password@host:port or socks5://user:password@host:port.") from None
+        raise ProxyCheckError("Invalid proxy. Use host:port:user:password or an http://, https:// or socks5:// proxy URL.") from None
     return HttpProxy(host, port, username, password,
-                     'socks5' if parsed.scheme.startswith('socks5') else 'http', not explicit_scheme)
+                     'socks5' if parsed.scheme.startswith('socks5') else parsed.scheme, not explicit_scheme)
 
 
 def parse_ip_response(body: str) -> str:

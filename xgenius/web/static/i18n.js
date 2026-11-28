@@ -44,6 +44,12 @@ ua_mismatch|User-Agent не совпадает с выбранным Chromium. �
 ua_format|Используйте стандартный User-Agent Windows Chromium, созданный генератором для выбранного ядра.|Use the standard Windows Chromium User-Agent generated for the selected browser.|Використовуйте стандартний User-Agent Windows Chromium, створений генератором для вибраного ядра.
 ua_copy_failed|Не удалось скопировать. Выделите User-Agent и нажмите Ctrl+C.|Could not copy. Select the User-Agent and press Ctrl+C.|Не вдалося скопіювати. Виділіть User-Agent і натисніть Ctrl+C.
 ua_live_failed|Не удалось прочитать User-Agent. Проверьте, что профиль ещё открыт.|Could not read the User-Agent. Check that the profile is still open.|Не вдалося прочитати User-Agent. Перевірте, що профіль ще відкритий.
+proxy_protocol|Тип прокси|Proxy protocol|Тип проксі
+proxy_protocol_auto|Авто|Auto|Авто
+proxy_tls_handshake|Не удалось установить TLS-соединение с HTTPS-прокси. Проверьте тип прокси и порт.|Could not establish TLS to the HTTPS proxy. Check the proxy protocol and port.|Не вдалося встановити TLS-з’єднання з HTTPS-проксі. Перевірте тип проксі та порт.
+proxy_ip_shared|Общий IP: ещё {count}|Shared IP: {count} more|Спільний IP: ще {count}
+proxy_ip_shared_hint|По последним успешным проверкам такой IP есть ещё у {count} профилей во всём рабочем пространстве. Повторите проверку для обновления.|The latest successful checks show this IP on {count} other profiles across the workspace. Check again to refresh.|За останніми успішними перевірками така IP є ще у {count} профілів у всьому робочому просторі. Повторіть перевірку для оновлення.
+proxy_rotation_compared|IP прокси изменён: {previous} → {ip}|Proxy IP changed: {previous} → {ip}|IP проксі змінено: {previous} → {ip}
 proxy_rotation_url|Ссылка ротации прокси|Proxy rotation URL|Посилання ротації проксі
 proxy_rotation_hint|Вставьте ссылку смены IP от провайдера прокси. Для ротации нажмите «Сменить IP» рядом с прокси.|Paste your provider's IP rotation link. Use Rotate IP next to the proxy to send the request.|Вставте посилання зміни IP від провайдера проксі. Для ротації натисніть «Змінити IP» біля проксі.
 proxy_ip_unreachable|Не удалось определить внешний IP через прокси. Проверьте адрес, порт и доступ к сети.|Cannot determine the external IP through the proxy. Check the address, port and network access.|Не вдалося визначити зовнішній IP через проксі. Перевірте адресу, порт і доступ до мережі.
@@ -51,7 +57,7 @@ proxy_socks_auth|Ошибка авторизации SOCKS5. Проверьте 
 proxy_ssl_error|Не удалось проверить HTTPS через прокси: ошибка сертификата.|Cannot verify HTTPS through the proxy: certificate error.|Не вдалося перевірити HTTPS через проксі: помилка сертифіката.
 proxy_ip_invalid|Сервис проверки не вернул корректный IP. Повторите проверку.|The check service did not return a valid IP. Try again.|Сервіс перевірки не повернув коректний IP. Повторіть перевірку.
 proxy_ip_http|Сервис проверки IP вернул HTTP {code} через прокси. Повторите проверку.|The IP check service returned HTTP {code} through the proxy. Try again.|Сервіс перевірки IP повернув HTTP {code} через проксі. Повторіть перевірку.
-proxy_format_invalid|Укажите host:port:логин:пароль, http://логин:пароль@host:port или socks5://логин:пароль@host:port.|Use host:port:login:password, http://login:password@host:port or socks5://login:password@host:port.|Вкажіть host:port:логін:пароль, http://логін:пароль@host:port або socks5://логін:пароль@host:port.
+proxy_format_invalid|Укажите host:port:логин:пароль или адрес со схемой http://, https:// либо socks5://.|Use host:port:login:password or a URL with http://, https:// or socks5://.|Вкажіть host:port:логін:пароль або адресу зі схемою http://, https:// чи socks5://.
 proxy_rotate|Сменить IP|Rotate IP|Змінити IP
 proxy_rotating|Меняем IP…|Rotating IP…|Змінюємо IP…
 proxy_rotation_changed|IP прокси изменён: {ip}|Proxy IP changed: {ip}|IP проксі змінено: {ip}
@@ -278,7 +284,7 @@ username|Логин X|X username|Логін X
 username_hint|Без @. Например, my_account.|Without @. For example, my_account.|Без @. Наприклад, my_account.
 proxy|Прокси|Proxy|Проксі
 no_proxy|Не указан|Not set|Не вказано
-proxy_hint|HTTP и SOCKS5: host:port:логин:пароль или адрес со схемой http:// / socks5://. Для старых строк тип определяется автоматически.|HTTP and SOCKS5: host:port:login:password or a URL with http:// / socks5://. Legacy strings are detected automatically.|HTTP і SOCKS5: host:port:логін:пароль або адреса зі схемою http:// / socks5://. Для старих рядків тип визначається автоматично.
+proxy_hint|HTTP, HTTPS и SOCKS5. Вставьте host:port:логин:пароль или полный адрес прокси. HTTPS шифрует соединение с самим прокси. Без схемы HTTP/SOCKS5 определяется автоматически.|HTTP, HTTPS and SOCKS5. Paste host:port:login:password or a full proxy URL. HTTPS encrypts the connection to the proxy itself. Without a scheme HTTP/SOCKS5 is detected automatically.|HTTP, HTTPS і SOCKS5. Вставте host:port:логін:пароль або повну адресу проксі. HTTPS шифрує з’єднання із самим проксі. Без схеми HTTP/SOCKS5 визначається автоматично.
 check_proxy|Проверить прокси|Check proxy|Перевірити проксі
 checking_proxy|Проверяем прокси…|Checking proxy…|Перевіряємо проксі…
 proxy_failed|Проверка прокси не пройдена|Proxy check failed|Перевірку проксі не пройдено
@@ -478,6 +484,8 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
     'User-Agent does not match the selected Chromium. Generate it again or select the matching browser version.':'ua_mismatch',
     'Choose automatic or manual User-Agent mode.':'ua_format',
     'Could not read the live User-Agent. Check that the profile is still open.':'ua_live_failed',
+    'Invalid proxy. Use host:port:user:password or an http://, https:// or socks5:// proxy URL.':'proxy_format_invalid',
+    'HTTPS proxy TLS handshake failed. Check protocol and port.':'proxy_tls_handshake',
     'Enter an HTTP or HTTPS proxy rotation link.':'rotation_invalid',
     'Add a proxy rotation link in the profile settings first.':'rotation_missing',
     'This proxy rotation link is already in use. Wait for the current rotation to finish.':'rotation_busy',
