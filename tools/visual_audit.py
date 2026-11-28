@@ -297,6 +297,21 @@ def audit_customization(page, label):
         close_navigation(page)
     page.locator('.rail [data-tool="browser_settings"]').click()
     expect(modal(page).locator('input[type="color"]')).to_have_count(6)
+    expect(modal(page).locator('[data-appearance-preset]')).to_have_count(6)
+    ocean = modal(page).locator('[data-appearance-preset="ocean"]')
+    ocean.focus()
+    page.keyboard.press('Space')
+    expect(ocean).to_have_attribute('aria-pressed', 'true')
+    mode = modal(page).locator('[name="appearance_theme"]')
+    mode.select_option('light' if theme == 'dark' else 'dark')
+    expect(ocean).to_have_attribute('aria-pressed', 'true')
+    dimensions = modal(page).locator('.appearance-presets').evaluate('el=>({width:el.clientWidth,scroll:el.scrollWidth})')
+    assert dimensions['scroll'] <= dimensions['width'] + 1, dimensions
+    screenshot(page, label + '-theme-presets')
+    modal(page).locator('.modal-foot [data-i18n="cancel"]').click()
+    page.wait_for_function("!document.querySelector('.modal-overlay')")
+    assert page.locator('html').get_attribute('data-theme') == theme
+    page.locator('.rail [data-tool="browser_settings"]').click()
     page.evaluate("toast('Synthetic feedback\\nA second line\\nA third line','ok',0)")
     modal(page).locator('[data-color-key="accent"]').evaluate("el=>{el.value='#2e9cca';el.dispatchEvent(new Event('input',{bubbles:true}));}")
     assert page.evaluate("document.documentElement.style.getPropertyValue('--color-accent')") == '#2E9CCA'
