@@ -99,7 +99,12 @@ def audit_dimensions(page):
 def audit_editor(page, name, embed=False, nested=False):
     page.locator('.header-actions [data-tool="add"]').click()
     active = modal(page)
-    expect(active.locator('.account-form [name]')).to_have_count(29)
+    expect(active.locator('.account-form [name]')).to_have_count(30)
+    protocol = active.locator('[name="proxy_protocol"]')
+    expect(protocol.locator('option')).to_have_count(4)
+    protocol.select_option('https')
+    active.locator('[name="proxy"]').fill('proxy.example:443:qa:synthetic-password')
+    expect(protocol).to_have_value('https')
     active.locator('.account-form details.advanced summary').click()
     ua = active.locator('[name="user_agent"]')
     mode = active.locator('[name="user_agent_mode"]')
