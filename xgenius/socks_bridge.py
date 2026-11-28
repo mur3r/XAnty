@@ -23,6 +23,7 @@ class _Handler(socketserver.BaseRequestHandler):
     def handle(self):
         bridge = self.server.bridge
         client, upstream = self.request, None
+        response_started = False
         with bridge.lock:
             if bridge.closed:
                 return
@@ -74,26 +75,16 @@ class _Handler(socketserver.BaseRequestHandler):
             if not host or port is None or not 1 <= port <= 65535:
                 self.reply(400)
                 return
-            proxy = bridge.upstream
-            # DNS is resolved at the SOCKS server. No direct target connection exists.
-            upstream = socks.create_connection((host, port), timeout=12,
-                proxy_type=socks.SOCKS5, proxy_addr=proxy.host, proxy_port=proxy.port,
-                proxy_rdns=True, proxy_username=proxy.username or None,
-                proxy_password=proxy.password or None)
+            # Origin DNS and connections go through the configured upstream.
+            upstream = bridge.connect(host, port)
             with bridge.lock:
                 if bridge.closed:
                     return
                 bridge.connections.add(upstream)
+            response = bridge.start_request(upstream, method, target, version, headers, upgrade, initial)
             if method == 'CONNECT':
-                client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
-            else:
-                path = urlunsplit(('', '', parsed.path or '/', parsed.query, ''))
-                # One HTTP request per connection keeps subsequent origins from
-                # being sent to the first origin. CONNECT tunnels stay persistent.
-                outgoing = f'{method} {path} {version}'.encode('ascii')
-                upstream.sendall(b'\r\n'.join([outgoing, *headers, b'Connection: Upgrade' if upgrade else b'Connection: close', b'', b'']))
-            if initial:
-                upstream.sendall(initial)
+                client.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n' + response)
+                response_started = True
             client.settimeout(None)
             upstream.settimeout(None)
             while not bridge.closed:
@@ -105,10 +96,12 @@ class _Handler(socketserver.BaseRequestHandler):
                     target_socket = upstream if source is client else client
                     target_socket.settimeout(15)
                     target_socket.sendall(block)
+                    if source is upstream:
+                        response_started = True
                     target_socket.settimeout(None)
         except (OSError, ValueError, UnicodeError, socks.ProxyError):
             try:
-                if upstream is None:
+                if not response_started:
                     self.reply(502)
             except OSError:
                 pass
@@ -158,3 +151,23 @@ class SocksBridge:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
+
+    def connect(self, host, port):
+        proxy = self.upstream
+        return socks.create_connection((host, port), timeout=12,
+            proxy_type=socks.SOCKS5, proxy_addr=proxy.host, proxy_port=proxy.port,
+            proxy_rdns=True, proxy_username=proxy.username or None,
+            proxy_password=proxy.password or None)
+
+    def start_request(self, upstream, method, target, version, headers, upgrade, initial):
+        if method != 'CONNECT':
+            parsed = urlsplit(target)
+            path = urlunsplit(('', '', parsed.path or '/', parsed.query, ''))
+            # One HTTP request per connection keeps subsequent origins from
+            # being sent to the first origin. CONNECT tunnels stay persistent.
+            outgoing = f'{method} {path} {version}'.encode('ascii')
+            upstream.sendall(b'\r\n'.join([outgoing, *headers,
+                b'Connection: Upgrade' if upgrade else b'Connection: close', b'', b'']))
+        if initial:
+            upstream.sendall(initial)
+        return b''

@@ -1,6 +1,7 @@
 """Validate HTTP/SOCKS5 proxies and check the public IP without a direct fallback."""
 
 import ipaddress
+import re
 from dataclasses import dataclass, replace
 import socket
 import time
@@ -24,6 +25,7 @@ class HttpProxy:
     username: str = ""
     password: str = ""
     scheme: str = "http"
+    auto_detect: bool = True
 
     @property
     def server(self):
@@ -44,11 +46,13 @@ def parse_proxy(value: str) -> HttpProxy:
         raise ProxyCheckError("Proxy is not configured. Add an HTTP proxy before opening the profile.")
     if any(c.isspace() for c in raw):
         raise ProxyCheckError("Invalid proxy format. Use host:port:user:password or http://user:password@host:port.")
-    if "://" not in raw and raw.count(":") >= 3 and not raw.startswith("["):
-        host, port, username, password = raw.split(":", 3)
-        raw = f"http://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}"
-    elif "://" not in raw:
-        raw = f"http://{raw}"
+    explicit_scheme = '://' in raw
+    scheme, address = raw.split('://', 1) if explicit_scheme else ('http', raw)
+    legacy = re.fullmatch(r'(\[[^\]]+\]|[^:/?#\[\]]+):(\d+):([^:]*):(.*)', address)
+    if legacy:
+        host, port, username, password = legacy.groups()
+        address = f"{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}"
+    raw = f'{scheme}://{address}'
     try:
         parsed = urlsplit(raw)
         if parsed.scheme not in ("http", "socks5", "socks5h"):
@@ -66,7 +70,8 @@ def parse_proxy(value: str) -> HttpProxy:
             raise ValueError("invalid host")
     except (ValueError, TypeError) as exc:
         raise ProxyCheckError("Invalid proxy. Use host:port:user:password, http://user:password@host:port or socks5://user:password@host:port.") from None
-    return HttpProxy(host, port, username, password, 'socks5' if parsed.scheme.startswith('socks5') else 'http')
+    return HttpProxy(host, port, username, password,
+                     'socks5' if parsed.scheme.startswith('socks5') else 'http', not explicit_scheme)
 
 
 def parse_ip_response(body: str) -> str:
@@ -115,7 +120,8 @@ def _socks5_port(host: str, port: int) -> bool:
 def resolve_proxy(proxy: HttpProxy) -> HttpProxy:
     # Older saved profile strings have no protocol and were treated as HTTP.
     # A positive SOCKS greeting is required before changing their interpretation.
-    return replace(proxy, scheme='socks5') if proxy.scheme == 'http' and _socks5_port(proxy.host, proxy.port) else proxy
+    return replace(proxy, scheme='socks5') if (proxy.scheme == 'http' and proxy.auto_detect
+        and _socks5_port(proxy.host, proxy.port)) else proxy
 
 
 def check_proxy(proxy: HttpProxy) -> str:

@@ -445,6 +445,7 @@ unsafe_package|Файл содержит недопустимые пути. Им
 package_version|Эта версия файла .xanty не поддерживается.|This .xanty package version is not supported.|Ця версія файлу .xanty не підтримується.
 profile_list_changed|Список профилей изменился во время импорта. Повторите попытку.|The profile list changed during import. Please retry.|Список профілів змінився під час імпорту. Повторіть спробу.
 proxy_auth_failed|Ошибка авторизации прокси (407). Проверьте логин и пароль.|Proxy authentication failed (407). Check login and password.|Помилка авторизації проксі (407). Перевірте логін і пароль.
+proxy_local_auth_failed|Chrome не смог авторизоваться в локальном адаптере прокси. Перезапустите профиль.|Chrome could not authenticate to its local proxy adapter. Restart the profile and retry.|Chrome не зміг авторизуватися в локальному адаптері проксі. Перезапустіть профіль.
 proxy_connect_failed|Не удалось подключиться через прокси. Проверьте адрес, порт и доступ.|Could not connect through the proxy. Check host, port and access.|Не вдалося підключитися через проксі. Перевірте адресу, порт і доступ.
 proxy_timeout|Прокси не ответил вовремя. Проверьте адрес и сеть.|The proxy timed out. Check the address and network.|Проксі не відповів вчасно. Перевірте адресу та мережу.
 chrome_start_failed|Не удалось запустить Chrome. Проверьте пути и совместимость Chrome и ChromeDriver.|Chrome could not start. Check Chrome and ChromeDriver paths and versions.|Не вдалося запустити Chrome. Перевірте шляхи та сумісність Chrome і ChromeDriver.
@@ -532,6 +533,7 @@ http_api_error|Dolphin API вернул HTTP {status}.|Dolphin API returned HTTP
     'IP check did not return a valid public IP.':'proxy_ip_invalid',
     'Invalid proxy. Use host:port:user:password, http://user:password@host:port or socks5://user:password@host:port.':'proxy_format_invalid',
     'Proxy authentication failed (407). Check login and password.':'proxy_auth_failed',
+    'Chrome could not authenticate to its local proxy adapter. Restart the profile and retry.':'proxy_local_auth_failed',
     'Cannot connect through the proxy. Check host, port and access.':'proxy_connect_failed',
     'Proxy timed out. Check the address and network.':'proxy_timeout',
     'Chrome could not start. Check Chrome and ChromeDriver paths/versions.':'chrome_start_failed',

@@ -104,6 +104,10 @@ class BrowserManager:
                 from xgenius.socks_bridge import SocksBridge
                 proxy_bridge = SocksBridge(proxy)
                 proxy = proxy_bridge.proxy
+            elif proxy.username:
+                from xgenius.http_bridge import HttpBridge
+                proxy_bridge = HttpBridge(proxy)
+                proxy = proxy_bridge.proxy
             chrome_bin = self.config.chrome_path
             driver_path = self.config.chromedriver_path
             options = Options()
@@ -197,7 +201,14 @@ class BrowserManager:
             track_browser_process(browser)
             if not credentials.headless:
                 attach_identity(browser,identity)
-            browser._xg_proxy_ip = await loop.run_in_executor(None,verify_browser_proxy,browser,proxy)
+            try:
+                browser._xg_proxy_ip = await loop.run_in_executor(None,verify_browser_proxy,browser,proxy)
+            except ProxyCheckError as exc:
+                if proxy_bridge is not None and getattr(proxy_bridge, 'last_error', None):
+                    raise ProxyCheckError(proxy_bridge.last_error) from None
+                if proxy_bridge is not None and 'authentication failed (407)' in str(exc):
+                    raise ProxyCheckError('Chrome could not authenticate to its local proxy adapter. Restart the profile and retry.') from None
+                raise
             proxy_verified = True
             await loop.run_in_executor(None, prepare_workspace, browser)
             browser.set_script_timeout(10)

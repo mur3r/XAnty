@@ -74,6 +74,8 @@ jobs:
           }
           python tools/smoke_browser.py --chrome (Join-Path $testRoot 'runtime/Bro/chrome.exe') --driver (Join-Path $testRoot 'runtime/Drivers/chromedriver.exe')
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python tools/smoke_proxy.py --chrome (Join-Path $testRoot 'runtime/Bro/chrome.exe') --driver (Join-Path $testRoot 'runtime/Drivers/chromedriver.exe')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python tools/smoke_desktop.py --exe (Join-Path $testRoot 'XAnty.exe') --version '${{ steps.version.outputs.version }}'
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $uninstall = Start-Process -FilePath (Join-Path $testRoot 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -PassThru -Wait

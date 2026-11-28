@@ -1,6 +1,7 @@
 """Chrome verifies rotating HTTP proxy routes without opening a page."""
 
 from contextlib import contextmanager
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -17,7 +18,16 @@ class BrowserProxyTests(unittest.TestCase):
     def verify(self, connection, proxy='127.0.0.1:8181:user:private-password'):
         module = proxy_module()
         with patch.object(module, 'browser_connection', connection.open):
-            return module.verify_browser_proxy(object(), parse_proxy(proxy), expected_ip='203.0.113.14')
+            browser = SimpleNamespace(_xg_proxy_extension=SimpleNamespace(worker_url=connection.worker_url))
+            return module.verify_browser_proxy(browser, parse_proxy(proxy), expected_ip='203.0.113.14')
+
+    def test_each_launch_has_a_fresh_worker_identity_even_with_unchanged_credentials(self):
+        proxy = parse_proxy('127.0.0.1:8181:user:private-password')
+        first = proxy_module().prepare_proxy_extension(proxy)
+        self.addCleanup(first.cleanup)
+        second = proxy_module().prepare_proxy_extension(proxy)
+        self.addCleanup(second.cleanup)
+        self.assertNotEqual(first.worker_url, second.worker_url)
 
     def test_a_rotating_proxy_exit_is_accepted_when_the_proxy_socket_is_verified(self):
         connection = ChromeProxyConnection()
@@ -66,6 +76,7 @@ class BrowserProxyTests(unittest.TestCase):
 class ChromeProxyConnection:
     def __init__(self, remote_ip='127.0.0.1', body='{"ip":"203.0.113.90"}', error=None,statuses=None, errors=None):
         self.remote_ip = remote_ip
+        self.worker_url = 'chrome-extension://synthetic-proxy-worker/background.js'
         self.body = body
         self.error = error
         self.errors = list(errors or [])
@@ -90,7 +101,7 @@ class ChromeProxyConnection:
                 {'targetId': 'user-tab', 'type': 'page', 'url': 'https://user.example/'},
                 {'targetId': 'other-worker', 'type': 'service_worker', 'url': 'chrome-extension://other/background.js'},
                 {'targetId': 'proxy-worker', 'type': 'service_worker',
-                 'url': proxy_module().PROXY_WORKER_URL}
+                 'url': self.worker_url}
             ]}
         if method == 'Target.attachToTarget':
             assert params == {'targetId': 'proxy-worker', 'flatten': True}

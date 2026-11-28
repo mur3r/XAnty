@@ -14,19 +14,6 @@ from xgenius.browser_cdp import CdpError, browser_connection
 from xgenius.proxy_service import IP_CHECK_URL, HttpProxy, ProxyCheckError, parse_ip_response
 
 
-# A public manifest key gives the worker the same known ID in every launch.
-_EXTENSION_KEY = (
-    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArVUZnWaikBrTezvqckptpqLJDTJA4WX"
-    "bJGDNkFPEysVH13auvUuGanJ5xs4ggJgZJYM2Nj5tT5iH9tCOz8aOVMFeSQuFm0JtFWgCFIDMI"
-    "qcRN1F74ixCGcaXM+WxlJxWX6tQ8Nq1Z7uc+rvvefe6bZQIu27804DvYJpy7arb7CHKwzz0PvI"
-    "pkpJOgC/aCwWtnoclb7wsDHAnwqsi6How+DxMx6W6Z91g+7hEyT6Dqt1tjT0G8r6KG47R8MFH"
-    "Je28euXLDG3I407s04mv4Ve8otOY/5yIQlrWCDdRXRKgNYNEdRgPnfh1QFCdejR8zBhWXJ0nn8"
-    "DwRP86S5avJS7GgQIDAQAB"
-)
-_EXTENSION_ID = hashlib.sha256(base64.b64decode(_EXTENSION_KEY)).hexdigest()[:32].translate(
-    str.maketrans("0123456789abcdef", "abcdefghijklmnop")
-)
-PROXY_WORKER_URL = f"chrome-extension://{_EXTENSION_ID}/background.js"
 _AUTH_ERROR = "Chrome proxy authentication failed (407). Check login and password."
 _CONNECTION_ERROR = "Chrome could not connect through the proxy. Check host, port and access."
 _WORKER_ERROR = "Chrome could not start its proxy verification worker. Check browser extension support and retry."
@@ -41,12 +28,23 @@ def prepare_proxy_extension(proxy: HttpProxy):
     """Create the private per-process extension and its proxy challenge handler."""
     extension = tempfile.TemporaryDirectory(prefix="xanty_proxy_")
     try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        # A fixed extension ID lets Chrome restore a cached service worker with
+        # the previous launch's credentials/port, despite a new temporary path.
+        # A fresh public identity prevents that cache from authenticating a new
+        # launch. No private key is persisted or sent to Chrome.
+        public_key = rsa.generate_private_key(public_exponent=65537, key_size=2048).public_key().public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+        extension_id = hashlib.sha256(public_key).hexdigest()[:32].translate(
+            str.maketrans('0123456789abcdef', 'abcdefghijklmnop'))
+        extension.worker_url = f'chrome-extension://{extension_id}/background.js'
         path = Path(extension.name)
         manifest = {
             "manifest_version": 3,
-            "key": _EXTENSION_KEY,
+            "key": base64.b64encode(public_key).decode('ascii'),
             "name": "XAnty Proxy",
-            "version": "1.1.0",
+            "version": "1.2.0",
             "permissions": ["webRequest", "webRequestAuthProvider"],
             "host_permissions": ["<all_urls>"] if proxy.username else ["https://api.ipify.org/*","https://api64.ipify.org/*","https://checkip.amazonaws.com/*"],
             "background": {"service_worker": "background.js"},
@@ -79,12 +77,12 @@ def prepare_proxy_extension(proxy: HttpProxy):
         raise ProxyCheckError("Cannot prepare proxy verification for Chrome.") from None
 
 
-def _find_worker(connection):
+def _find_worker(connection, worker_url):
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         targets = connection.call('Target.getTargets', {}, timeout=1).get('targetInfos', [])
         for target in targets:
-            if target.get('type') == 'service_worker' and target.get('url') == PROXY_WORKER_URL:
+            if target.get('type') == 'service_worker' and target.get('url') == worker_url:
                 return target['targetId']
         time.sleep(.05)
     raise ProxyCheckError(_WORKER_ERROR)
@@ -191,9 +189,12 @@ def verify_browser_proxy(browser, proxy: HttpProxy, expected_ip=None) -> str:
 
     The HTTP preflight and Chrome can legitimately have different exit IPs.
     """
+    worker_url = getattr(getattr(browser, '_xg_proxy_extension', None), 'worker_url', None)
+    if not worker_url:
+        raise ProxyCheckError(_WORKER_ERROR)
     try:
         with browser_connection(browser, timeout=10) as connection:
-            target_id = _find_worker(connection)
+            target_id = _find_worker(connection, worker_url)
             session_id = connection.call('Target.attachToTarget', {'targetId': target_id, 'flatten': True})['sessionId']
             try:
                 _wait_for_worker(connection, session_id)
